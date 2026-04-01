@@ -1,0 +1,151 @@
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
+
+import '../models/mood_log.dart';
+import '../models/user_stats.dart';
+
+class AppDatabase {
+  AppDatabase._();
+
+  static final AppDatabase instance = AppDatabase._();
+
+  Database? _database;
+
+  Future<Database> get database async {
+    if (_database != null) {
+      return _database!;
+    }
+
+    _database = await _openDatabase();
+    return _database!;
+  }
+
+  Future<Database> _openDatabase() async {
+    final databaseDirectory = await getDatabasesPath();
+    final databasePath = p.join(databaseDirectory, 'me_mind_journal.db');
+
+    return openDatabase(
+      databasePath,
+      version: 2,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE mood_logs(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            mood TEXT NOT NULL,
+            intensity INTEGER NOT NULL DEFAULT 5,
+            note TEXT NOT NULL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE user_stats(
+            id INTEGER PRIMARY KEY,
+            xp INTEGER NOT NULL,
+            level INTEGER NOT NULL,
+            streak INTEGER NOT NULL,
+            last_checkin_date TEXT
+          )
+        ''');
+
+        await db.insert('user_stats', UserStats.initial().toMap());
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // v2 keeps existing journal history intact and backfills intensity at 5.
+          await db.execute(
+            'ALTER TABLE mood_logs ADD COLUMN intensity INTEGER NOT NULL DEFAULT 5',
+          );
+        }
+      },
+    );
+  }
+
+  Future<UserStats> ensureUserStats() async {
+    final db = await database;
+    final rows = await db.query(
+      'user_stats',
+      where: 'id = ?',
+      whereArgs: const [1],
+      limit: 1,
+    );
+
+    if (rows.isEmpty) {
+      final defaultStats = UserStats.initial();
+      await db.insert('user_stats', defaultStats.toMap());
+      return defaultStats;
+    }
+
+    return UserStats.fromMap(rows.first);
+  }
+
+  Future<void> upsertUserStats(UserStats stats) async {
+    final db = await database;
+
+    await db.insert(
+      'user_stats',
+      stats.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<MoodLog?> getMoodLogByDate(String date) async {
+    final db = await database;
+    final rows = await db.query(
+      'mood_logs',
+      where: 'date = ?',
+      whereArgs: [date],
+      limit: 1,
+    );
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    return MoodLog.fromMap(rows.first);
+  }
+
+  Future<MoodLog> insertMoodLog(MoodLog moodLog) async {
+    final db = await database;
+    final id = await db.insert('mood_logs', moodLog.toMap());
+
+    return moodLog.copyWith(id: id);
+  }
+
+  Future<void> updateMoodLog(MoodLog moodLog) async {
+    final db = await database;
+
+    await db.update(
+      'mood_logs',
+      moodLog.toMap(),
+      where: 'id = ?',
+      whereArgs: [moodLog.id],
+    );
+  }
+
+  Future<List<MoodLog>> fetchRecentMoodLogs({int limit = 5}) async {
+    final db = await database;
+    final rows = await db.query(
+      'mood_logs',
+      orderBy: 'date DESC',
+      limit: limit,
+    );
+
+    return rows.map(MoodLog.fromMap).toList();
+  }
+
+  Future<List<MoodLog>> fetchMoodLogsBetween({
+    required String startDate,
+    required String endDate,
+  }) async {
+    final db = await database;
+    final rows = await db.query(
+      'mood_logs',
+      where: 'date >= ? AND date <= ?',
+      whereArgs: [startDate, endDate],
+      orderBy: 'date ASC',
+    );
+
+    return rows.map(MoodLog.fromMap).toList();
+  }
+}

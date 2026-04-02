@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/glass_panel.dart';
 import 'micro_interactions.dart';
 
 class ReflectionPromptCard extends StatelessWidget {
@@ -22,12 +23,9 @@ class ReflectionPromptCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return RevealOnBuild(
       offset: const Offset(0, 16),
-      child: Container(
+      child: GlassPanel(
         padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(28),
-        ),
+        tint: color.withValues(alpha: 0.12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -77,9 +75,7 @@ class ReflectionPromptCard extends StatelessWidget {
             const SizedBox(height: 14),
             Text(
               'Take one honest breath and write what is true right now.',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.black54,
-                  ),
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 18),
             _AnimatedHintTextField(

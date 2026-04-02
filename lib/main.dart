@@ -2,16 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/app_theme.dart';
+import 'core/services/theme_service.dart';
 import 'db/app_database.dart';
 import 'features/mind/providers/mind_me_provider.dart';
 import 'screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await ThemeService.instance.initialize();
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => MindMeProvider(database: AppDatabase.instance),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<ThemeService>.value(
+          value: ThemeService.instance,
+        ),
+        ChangeNotifierProvider(
+          create: (_) => MindMeProvider(database: AppDatabase.instance),
+        ),
+      ],
       child: const MeApp(),
     ),
   );
@@ -22,11 +31,17 @@ class MeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ME',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: const SplashScreen(),
+    return Consumer<ThemeService>(
+      builder: (context, themeService, _) {
+        return MaterialApp(
+          title: 'ME',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.themeFor(themeService.currentTheme),
+          themeAnimationCurve: Curves.easeOutCubic,
+          themeAnimationDuration: const Duration(milliseconds: 420),
+          home: const SplashScreen(),
+        );
+      },
     );
   }
 }

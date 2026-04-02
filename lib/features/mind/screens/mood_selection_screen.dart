@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/app_routes.dart';
+import '../../../core/app_theme.dart';
+import '../../../core/services/theme_service.dart';
 import '../micro_interactions.dart';
 import '../mood_catalog.dart';
 import '../mood_slider.dart';
@@ -21,19 +24,21 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final palette =
+        context.select((ThemeService settings) => AppTheme.paletteOf(settings.currentTheme));
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mind Me'),
       ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFF6EDE4),
-              Color(0xFFF6F8F5),
+              palette.backgroundTop,
+              palette.backgroundBottom,
             ],
           ),
         ),
@@ -79,7 +84,6 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
                             mood: mood,
                             isSelected: mood == _selectedMood,
                             onTap: () {
-                              MindHaptics.cardTap();
                               setState(() => _selectedMood = mood);
                             },
                           );

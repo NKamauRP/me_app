@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_routes.dart';
+import '../core/app_theme.dart';
+import '../core/services/theme_service.dart';
 import '../features/mind/providers/mind_me_provider.dart';
 import 'home_screen.dart';
 
@@ -36,16 +38,19 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette =
+        context.select((ThemeService settings) => AppTheme.paletteOf(settings.currentTheme));
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF1E766F),
-              Color(0xFF3F6F94),
-              Color(0xFFF4B94A),
+              palette.heroTop,
+              palette.heroBottom,
+              palette.accent,
             ],
           ),
         ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/date_utils.dart';
 import '../../models/mood_log.dart';
+import '../../shared/widgets/glass_panel.dart';
 import 'micro_interactions.dart';
 import 'mood_catalog.dart';
 
@@ -29,13 +30,8 @@ class WeeklyMoodGraph extends StatelessWidget {
         .toList();
 
     return RevealOnBuild(
-      onCompleted: MindHaptics.cardTap,
-      child: Container(
+      child: GlassPanel(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(28),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -46,9 +42,7 @@ class WeeklyMoodGraph extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Intensity across your last seven days.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.black54,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 18),
             SizedBox(
@@ -107,7 +101,7 @@ class WeeklyMoodGraph extends StatelessWidget {
                               AppDateUtils.shortWeekday(days[index]),
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: Colors.black54,
+                                color: Color(0xFF7E8389),
                               ),
                             ),
                           );

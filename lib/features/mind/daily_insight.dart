@@ -1,7 +1,8 @@
-import '../../models/mood_log.dart';
-import '../../models/user_stats.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/mood_log.dart';
+import '../../models/user_stats.dart';
+import '../../shared/widgets/glass_panel.dart';
 import 'mood_catalog.dart';
 
 class DailyInsight {
@@ -26,6 +27,16 @@ class ProgressFlavor {
   final String subtitle;
 }
 
+class MoodIdentity {
+  const MoodIdentity({
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String title;
+  final String subtitle;
+}
+
 class DailyInsightCard extends StatelessWidget {
   const DailyInsightCard({
     super.key,
@@ -38,14 +49,8 @@ class DailyInsightCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = Color(insight.accentColor);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: accent.withValues(alpha: 0.18)),
-      ),
+    return GlassPanel(
+      tint: accent.withValues(alpha: 0.16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -63,9 +68,7 @@ class DailyInsightCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             insight.message,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Colors.black54,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge,
           ),
         ],
       ),
@@ -168,6 +171,34 @@ ProgressFlavor streakFlavorFor(int streak) {
   return const ProgressFlavor(
     title: 'Locked in',
     subtitle: 'This pattern is becoming part of you.',
+  );
+}
+
+MoodIdentity moodIdentityFor(int streak) {
+  if (streak <= 3) {
+    return const MoodIdentity(
+      title: 'Getting Started \u{1F331}',
+      subtitle: 'You are building the habit one honest day at a time.',
+    );
+  }
+
+  if (streak <= 7) {
+    return const MoodIdentity(
+      title: 'Self Observer \u{1F441}\u{FE0F}',
+      subtitle: 'You are noticing patterns instead of rushing past them.',
+    );
+  }
+
+  if (streak <= 14) {
+    return const MoodIdentity(
+      title: 'Mind Explorer \u{1F9E0}',
+      subtitle: 'Your reflections are starting to map your inner weather.',
+    );
+  }
+
+  return const MoodIdentity(
+    title: 'Emotion Master \u{1F525}',
+    subtitle: 'You have turned consistency into a powerful self-check ritual.',
   );
 }
 

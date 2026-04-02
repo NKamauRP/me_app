@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
+import '../../core/services/haptics_service.dart';
 
 class MindHaptics {
-  static void cardTap() => HapticFeedback.lightImpact();
+  static Future<void> cardTap() => HapticsService.instance.lightImpact();
 
-  static void sliderTick() => HapticFeedback.selectionClick();
+  static Future<void> sliderTick() => HapticsService.instance.mediumImpact();
 
-  static void confirm() => HapticFeedback.mediumImpact();
+  static Future<void> confirm() => HapticsService.instance.heavyImpact();
+
+  static Future<void> celebrate() => HapticsService.instance.heavyImpact();
 }
 
 class TapScale extends StatefulWidget {

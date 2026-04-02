@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../shared/widgets/glass_panel.dart';
+
 class ModuleCard extends StatelessWidget {
   const ModuleCard({
     super.key,
@@ -25,13 +27,12 @@ class ModuleCard extends StatelessWidget {
     return Opacity(
       opacity: enabled ? 1 : 0.68,
       child: Material(
-        color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(28),
+        color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(28),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
+          child: GlassPanel(
+            tint: accentColor.withValues(alpha: 0.12),
             child: Row(
               children: [
                 Container(
@@ -55,9 +56,7 @@ class ModuleCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         subtitle,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.black54,
-                            ),
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
                   ),

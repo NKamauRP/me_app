@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'glass_panel.dart';
+
 class StatCard extends StatelessWidget {
   const StatCard({
     super.key,
@@ -16,12 +18,9 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassPanel(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(24),
-      ),
+      tint: accentColor.withValues(alpha: 0.12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -36,9 +35,7 @@ class StatCard extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.black54,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 6),
           Text(

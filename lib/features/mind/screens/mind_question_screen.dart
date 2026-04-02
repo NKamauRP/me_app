@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_routes.dart';
+import '../../../core/app_theme.dart';
+import '../../../core/services/sound_service.dart';
+import '../../../core/services/theme_service.dart';
+import '../../../shared/widgets/glass_panel.dart';
 import '../micro_interactions.dart';
 import '../mood_catalog.dart';
 import '../providers/mind_me_provider.dart';
@@ -45,6 +49,7 @@ class _MindQuestionScreenState extends State<MindQuestionScreen> {
     }
 
     setState(() => _isSubmitting = true);
+    MindHaptics.confirm();
 
     try {
       final result = await context.read<MindMeProvider>().submitMood(
@@ -52,6 +57,7 @@ class _MindQuestionScreenState extends State<MindQuestionScreen> {
             intensity: widget.intensity,
             note: _noteController.text,
           );
+      await SoundService.instance.playSuccess();
 
       if (!mounted) {
         return;
@@ -86,19 +92,21 @@ class _MindQuestionScreenState extends State<MindQuestionScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final prompt = widget.mood.promptForIntensity(widget.intensity);
+    final palette =
+        context.select((ThemeService settings) => AppTheme.paletteOf(settings.currentTheme));
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mind Me'),
       ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFF7EEE5),
-              Color(0xFFF9F8F3),
+              palette.backgroundTop,
+              palette.backgroundBottom,
             ],
           ),
         ),
@@ -107,12 +115,9 @@ class _MindQuestionScreenState extends State<MindQuestionScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
             children: [
-              Container(
+              GlassPanel(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.88),
-                  borderRadius: BorderRadius.circular(28),
-                ),
+                tint: widget.mood.color.withValues(alpha: 0.12),
                 child: Row(
                   children: [
                     CircleAvatar(
@@ -172,9 +177,7 @@ class _MindQuestionScreenState extends State<MindQuestionScreen> {
                         widget.intensity >= 7
                             ? 'Big feelings deserve a gentle answer.'
                             : 'A short note is enough to make today visible.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.black54,
-                            ),
+                        style: theme.textTheme.bodyMedium,
                       ),
                     ),
                   ],

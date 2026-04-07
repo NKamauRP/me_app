@@ -19,9 +19,26 @@ class GlassPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final overlayColor =
-        tint ?? theme.colorScheme.surface.withValues(alpha: 0.58);
-    final outlineColor = theme.colorScheme.onSurface.withValues(alpha: 0.08);
+    final isDark = theme.brightness == Brightness.dark;
+    final baseSurface = theme.colorScheme.surface.withValues(
+      alpha: isDark ? 0.94 : 0.96,
+    );
+
+    // Blend tint into the current surface instead of replacing it. This keeps
+    // dark themes readable and prevents pale mood colors from turning the panel
+    // into a giant grey sheet.
+    final tintOverlay = (tint ?? theme.colorScheme.primary).withValues(
+      alpha: isDark ? 0.14 : 0.08,
+    );
+    final blendedSurface = Color.alphaBlend(tintOverlay, baseSurface);
+    final topColor = blendedSurface.withValues(alpha: isDark ? 0.84 : 0.90);
+    final bottomColor = Color.alphaBlend(
+      theme.colorScheme.surface.withValues(alpha: isDark ? 0.12 : 0.04),
+      blendedSurface,
+    ).withValues(alpha: isDark ? 0.74 : 0.82);
+    final outlineColor = (tint ?? theme.colorScheme.onSurface).withValues(
+      alpha: isDark ? 0.14 : 0.08,
+    );
 
     return RepaintBoundary(
       child: ClipRRect(
@@ -35,8 +52,8 @@ class GlassPanel extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  overlayColor.withValues(alpha: 0.78),
-                  overlayColor.withValues(alpha: 0.44),
+                  topColor,
+                  bottomColor,
                 ],
               ),
               border: Border.all(color: outlineColor),

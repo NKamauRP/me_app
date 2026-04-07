@@ -15,6 +15,10 @@ Route<T> buildAppRoute<T>(Widget child) {
         parent: animation,
         curve: Curves.easeOutCubic,
       );
+      final scaleAnimation = Tween<double>(
+        begin: 0.985,
+        end: 1,
+      ).animate(curvedAnimation);
 
       return FadeTransition(
         opacity: curvedAnimation,
@@ -23,7 +27,10 @@ Route<T> buildAppRoute<T>(Widget child) {
             begin: const Offset(0, 0.04),
             end: Offset.zero,
           ).animate(curvedAnimation),
-          child: transitionChild,
+          child: ScaleTransition(
+            scale: scaleAnimation,
+            child: transitionChild,
+          ),
         ),
       );
     },

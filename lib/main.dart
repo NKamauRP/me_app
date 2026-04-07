@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/app_theme.dart';
+import 'core/services/audio_service.dart';
+import 'core/services/notification_service.dart';
 import 'core/services/theme_service.dart';
 import 'db/app_database.dart';
 import 'features/mind/providers/mind_me_provider.dart';
@@ -10,6 +12,8 @@ import 'screens/splash_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeService.instance.initialize();
+  await AudioService.instance.initialize();
+  await NotificationService.instance.initialize();
 
   runApp(
     MultiProvider(

@@ -5,9 +5,12 @@ import '../../core/services/haptics_service.dart';
 class MindHaptics {
   static Future<void> cardTap() => HapticsService.instance.lightImpact();
 
-  static Future<void> sliderTick() => HapticsService.instance.mediumImpact();
+  static Future<void> moodSelection() =>
+      HapticsService.instance.selectionClick();
 
-  static Future<void> confirm() => HapticsService.instance.heavyImpact();
+  static Future<void> sliderTick() => HapticsService.instance.lightImpact();
+
+  static Future<void> confirm() => HapticsService.instance.mediumImpact();
 
   static Future<void> celebrate() => HapticsService.instance.heavyImpact();
 }
@@ -155,31 +158,57 @@ class AnimatedActionButton extends StatelessWidget {
     required this.onPressed,
     this.isLoading = false,
     this.icon,
+    this.onTapFeedback,
+    this.enableDefaultFeedback = true,
+    this.showGlow = false,
+    this.glowColor,
+    this.backgroundColor,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool isLoading;
   final IconData? icon;
+  final VoidCallback? onTapFeedback;
+  final bool enableDefaultFeedback;
+  final bool showGlow;
+  final Color? glowColor;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null && !isLoading;
+    final effectiveGlowColor = glowColor ?? const Color(0xFF1D7A72);
+    final effectiveBackgroundColor = backgroundColor ?? const Color(0xFF1D7A72);
 
     return TapScale(
       enabled: enabled,
       onTap: () {
-        MindHaptics.confirm();
+        if (onTapFeedback != null) {
+          onTapFeedback!.call();
+        } else if (enableDefaultFeedback) {
+          MindHaptics.confirm();
+        }
         onPressed?.call();
       },
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 180),
         opacity: enabled ? 1 : 0.55,
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 260),
           height: 56,
           decoration: BoxDecoration(
-            color: const Color(0xFF1D7A72),
+            color: effectiveBackgroundColor,
             borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              if (showGlow)
+                BoxShadow(
+                  color: effectiveGlowColor.withValues(alpha: 0.34),
+                  blurRadius: 22,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 8),
+                ),
+            ],
           ),
           child: Center(
             child: isLoading

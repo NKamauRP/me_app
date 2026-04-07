@@ -10,6 +10,7 @@ class MoodOption {
     required this.prompts,
     required this.color,
     required this.icon,
+    this.isCustom = false,
   });
 
   final String id;
@@ -18,6 +19,30 @@ class MoodOption {
   final List<String> prompts;
   final Color color;
   final IconData icon;
+  final bool isCustom;
+
+  String get hexColor =>
+      '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+
+  MoodOption copyWith({
+    String? id,
+    String? label,
+    String? emoji,
+    List<String>? prompts,
+    Color? color,
+    IconData? icon,
+    bool? isCustom,
+  }) {
+    return MoodOption(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      emoji: emoji ?? this.emoji,
+      prompts: prompts ?? this.prompts,
+      color: color ?? this.color,
+      icon: icon ?? this.icon,
+      isCustom: isCustom ?? this.isCustom,
+    );
+  }
 
   String promptForIntensity(int intensity) {
     if (prompts.isEmpty) {
@@ -36,42 +61,97 @@ class MoodOption {
   }
 }
 
+const Color _amberMood = Color(0xFFFAC775);
+const Color _tealMood = Color(0xFF9FE1CB);
+const Color _grayMood = Color(0xFFB4B2A9);
+const Color _purpleMood = Color(0xFFAFA9EC);
+const Color _blueMood = Color(0xFF85B7EB);
+const Color _redMood = Color(0xFFF09595);
+
 const List<MoodOption> mindMoodOptions = [
-  MoodOption(
-    id: 'stress',
-    label: 'Stress',
-    emoji: '\u{1F635}',
-    prompts: <String>[
-      'What is causing your stress today?',
-      'What feels most important to release right now?',
-      'What would make today feel 10% lighter?',
-    ],
-    color: Color(0xFFE77752),
-    icon: Icons.psychology_alt_rounded,
-  ),
   MoodOption(
     id: 'happy',
     label: 'Happy',
     emoji: '\u{1F60A}',
     prompts: <String>[
-      'What made you feel good today?',
-      'What moment do you want to remember from today?',
-      'How can you carry this energy into tomorrow?',
+      'What made today feel bright?',
+      'What do you want to hold onto from this moment?',
+      'How can you carry this energy into the rest of your day?',
     ],
-    color: Color(0xFFF5B94A),
+    color: _amberMood,
     icon: Icons.wb_sunny_rounded,
   ),
   MoodOption(
-    id: 'anxious',
-    label: 'Anxious',
-    emoji: '\u{1F62C}',
+    id: 'grateful',
+    label: 'Grateful',
+    emoji: '\u{1F64F}',
     prompts: <String>[
-      'What is making you feel uneasy today?',
-      'What thought is asking for your attention right now?',
-      'What would help you feel safer in this moment?',
+      'What are you grateful for right now?',
+      'Who or what supported you today?',
+      'How did this gratitude shift your perspective today?',
     ],
-    color: Color(0xFF7C86F7),
-    icon: Icons.favorite_outline_rounded,
+    color: _tealMood,
+    icon: Icons.favorite_rounded,
+  ),
+  MoodOption(
+    id: 'energised',
+    label: 'Energised',
+    emoji: '\u26A1',
+    prompts: <String>[
+      'What is giving you energy today?',
+      'Where do you want to direct this energy next?',
+      'What would help you use this momentum well?',
+    ],
+    color: _amberMood,
+    icon: Icons.bolt_rounded,
+  ),
+  MoodOption(
+    id: 'calm',
+    label: 'Calm',
+    emoji: '\u{1F60C}',
+    prompts: <String>[
+      'What is helping you feel steady today?',
+      'What part of today feels peaceful?',
+      'How can you protect this calm for a little longer?',
+    ],
+    color: _tealMood,
+    icon: Icons.spa_rounded,
+  ),
+  MoodOption(
+    id: 'okay',
+    label: 'Okay',
+    emoji: '\u{1F610}',
+    prompts: <String>[
+      'What feels ordinary but important today?',
+      'What would make today feel a bit better?',
+      'What are you noticing beneath “okay”?',
+    ],
+    color: _grayMood,
+    icon: Icons.thumbs_up_down_rounded,
+  ),
+  MoodOption(
+    id: 'meh',
+    label: 'Meh',
+    emoji: '\u{1F611}',
+    prompts: <String>[
+      'What feels flat or uninteresting today?',
+      'What are you low on right now?',
+      'What small thing might help shift this feeling?',
+    ],
+    color: _grayMood,
+    icon: Icons.sentiment_neutral_rounded,
+  ),
+  MoodOption(
+    id: 'focused',
+    label: 'Focused',
+    emoji: '\u{1F3AF}',
+    prompts: <String>[
+      'What has your full attention today?',
+      'What are you making progress on right now?',
+      'How can you protect your focus for the rest of the day?',
+    ],
+    color: _purpleMood,
+    icon: Icons.track_changes_rounded,
   ),
   MoodOption(
     id: 'tired',
@@ -79,17 +159,71 @@ const List<MoodOption> mindMoodOptions = [
     emoji: '\u{1F634}',
     prompts: <String>[
       'What drained your energy today?',
-      'Where did your energy go most today?',
-      'What kind of rest would actually help tonight?',
+      'What kind of rest do you need most right now?',
+      'What would help you feel 10% more restored?',
     ],
-    color: Color(0xFF4F9B93),
-    icon: Icons.nightlight_round,
+    color: _blueMood,
+    icon: Icons.bedtime_rounded,
+  ),
+  MoodOption(
+    id: 'anxious',
+    label: 'Anxious',
+    emoji: '\u{1F630}',
+    prompts: <String>[
+      'What is making you feel uneasy today?',
+      'What thought keeps circling right now?',
+      'What would help you feel safer in this moment?',
+    ],
+    color: _redMood,
+    icon: Icons.favorite_outline_rounded,
+  ),
+  MoodOption(
+    id: 'stressed',
+    label: 'Stressed',
+    emoji: '\u{1F624}',
+    prompts: <String>[
+      'What is putting pressure on you today?',
+      'What feels most urgent right now?',
+      'What can you release or simplify first?',
+    ],
+    color: _redMood,
+    icon: Icons.psychology_alt_rounded,
+  ),
+  MoodOption(
+    id: 'sad',
+    label: 'Sad',
+    emoji: '\u{1F622}',
+    prompts: <String>[
+      'What feels heavy today?',
+      'What happened that touched this sadness?',
+      'What kind of comfort would help right now?',
+    ],
+    color: _blueMood,
+    icon: Icons.cloud_rounded,
+  ),
+  MoodOption(
+    id: 'custom',
+    label: 'Custom',
+    emoji: '\u270F\uFE0F',
+    prompts: <String>[
+      'What word best describes your mood today?',
+      'What is this mood asking you to notice?',
+      'How would you describe this feeling in your own words?',
+    ],
+    color: _purpleMood,
+    icon: Icons.edit_rounded,
+    isCustom: true,
   ),
 ];
 
 MoodOption moodOptionById(String id) {
+  final normalizedId = switch (id) {
+    'stress' => 'stressed',
+    _ => id,
+  };
+
   return mindMoodOptions.firstWhere(
-    (mood) => mood.id == id,
+    (mood) => mood.id == normalizedId,
     orElse: () => mindMoodOptions.first,
   );
 }
@@ -97,13 +231,28 @@ MoodOption moodOptionById(String id) {
 double moodWellbeingScore(MoodLog moodLog) {
   switch (moodLog.mood) {
     case 'happy':
-      return 6 + (moodLog.intensity * 0.4);
+      return 6.6 + (moodLog.intensity * 0.32);
+    case 'grateful':
+      return 6.5 + (moodLog.intensity * 0.28);
+    case 'energised':
+      return 6.3 + (moodLog.intensity * 0.35);
+    case 'calm':
+      return 6.2 + (moodLog.intensity * 0.26);
+    case 'focused':
+      return 6.0 + (moodLog.intensity * 0.24);
+    case 'okay':
+      return 5.6 + (moodLog.intensity * 0.08);
+    case 'meh':
+      return 5.0 - (moodLog.intensity * 0.10);
     case 'tired':
-      return 6 - (moodLog.intensity * 0.25);
-    case 'stress':
-      return 5.5 - (moodLog.intensity * 0.35);
+      return 5.1 - (moodLog.intensity * 0.24);
+    case 'sad':
+      return 4.9 - (moodLog.intensity * 0.30);
     case 'anxious':
-      return 5.2 - (moodLog.intensity * 0.35);
+      return 4.8 - (moodLog.intensity * 0.34);
+    case 'stress':
+    case 'stressed':
+      return 4.7 - (moodLog.intensity * 0.35);
     default:
       return 5;
   }

@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_routes.dart';
 import '../../../core/app_theme.dart';
-import '../../../core/services/sound_service.dart';
+import '../../../core/services/feedback_service.dart';
 import '../../../core/services/theme_service.dart';
 import '../../../shared/widgets/glass_panel.dart';
 import '../micro_interactions.dart';
@@ -29,11 +31,29 @@ class MindQuestionScreen extends StatefulWidget {
 class _MindQuestionScreenState extends State<MindQuestionScreen> {
   final TextEditingController _noteController = TextEditingController();
   bool _isSubmitting = false;
+  bool _showSubmitGlow = false;
+  Timer? _submitGlowTimer;
 
   @override
   void dispose() {
+    _submitGlowTimer?.cancel();
     _noteController.dispose();
     super.dispose();
+  }
+
+  void _triggerSubmitFeedback() {
+    final cue = FeedbackService.instance.submitAction();
+    if (!cue.buttonGlow || !mounted) {
+      return;
+    }
+
+    setState(() => _showSubmitGlow = true);
+    _submitGlowTimer?.cancel();
+    _submitGlowTimer = Timer(const Duration(milliseconds: 820), () {
+      if (mounted) {
+        setState(() => _showSubmitGlow = false);
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -48,8 +68,8 @@ class _MindQuestionScreenState extends State<MindQuestionScreen> {
       return;
     }
 
+    _triggerSubmitFeedback();
     setState(() => _isSubmitting = true);
-    MindHaptics.confirm();
 
     try {
       final result = await context.read<MindMeProvider>().submitMood(
@@ -57,7 +77,6 @@ class _MindQuestionScreenState extends State<MindQuestionScreen> {
             intensity: widget.intensity,
             note: _noteController.text,
           );
-      await SoundService.instance.playSuccess();
 
       if (!mounted) {
         return;
@@ -188,6 +207,10 @@ class _MindQuestionScreenState extends State<MindQuestionScreen> {
                 label: 'Submit check-in',
                 icon: Icons.check_circle_outline_rounded,
                 isLoading: _isSubmitting,
+                enableDefaultFeedback: false,
+                backgroundColor: widget.mood.color,
+                showGlow: _showSubmitGlow,
+                glowColor: widget.mood.color,
                 onPressed: _isSubmitting ? null : _submit,
               ),
             ],

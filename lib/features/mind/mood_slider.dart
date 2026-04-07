@@ -94,10 +94,12 @@ class _MoodIntensitySliderState extends State<MoodIntensitySlider> {
                       label: _sliderValue.round().toString(),
                       onChanged: (value) {
                         final rounded = value.round();
-                        if (_lastHapticValue != rounded) {
+                        final shouldPulse = rounded != _lastHapticValue &&
+                            (rounded == 1 || rounded == 5 || rounded == 10);
+                        if (shouldPulse) {
                           MindHaptics.sliderTick();
-                          _lastHapticValue = rounded;
                         }
+                        _lastHapticValue = rounded;
 
                         setState(() => _sliderValue = value);
                         widget.onChanged(rounded);

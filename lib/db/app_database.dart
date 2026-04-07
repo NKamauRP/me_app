@@ -26,7 +26,12 @@ class AppDatabase {
 
     return openDatabase(
       databasePath,
-      version: 2,
+      version: 3,
+      onConfigure: (db) async {
+        // WAL mode keeps reads/writes responsive as journal history grows.
+        await db.execute('PRAGMA journal_mode = WAL');
+        await db.execute('PRAGMA synchronous = NORMAL');
+      },
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE mood_logs(
@@ -36,6 +41,11 @@ class AppDatabase {
             intensity INTEGER NOT NULL DEFAULT 5,
             note TEXT NOT NULL
           )
+        ''');
+
+        await db.execute('''
+          CREATE INDEX idx_mood_logs_mood_date
+          ON mood_logs(mood, date DESC)
         ''');
 
         await db.execute('''
@@ -56,6 +66,13 @@ class AppDatabase {
           await db.execute(
             'ALTER TABLE mood_logs ADD COLUMN intensity INTEGER NOT NULL DEFAULT 5',
           );
+        }
+
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE INDEX IF NOT EXISTS idx_mood_logs_mood_date
+            ON mood_logs(mood, date DESC)
+          ''');
         }
       },
     );
@@ -144,6 +161,31 @@ class AppDatabase {
       where: 'date >= ? AND date <= ?',
       whereArgs: [startDate, endDate],
       orderBy: 'date ASC',
+    );
+
+    return rows.map(MoodLog.fromMap).toList();
+  }
+
+  Future<List<MoodLog>> fetchAllMoodLogs() async {
+    final db = await database;
+    final rows = await db.query(
+      'mood_logs',
+      orderBy: 'date DESC',
+    );
+
+    return rows.map(MoodLog.fromMap).toList();
+  }
+
+  Future<List<MoodLog>> fetchMoodLogsPage({
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    final rows = await db.query(
+      'mood_logs',
+      orderBy: 'date DESC',
+      limit: limit,
+      offset: offset,
     );
 
     return rows.map(MoodLog.fromMap).toList();

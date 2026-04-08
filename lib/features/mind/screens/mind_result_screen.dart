@@ -2,13 +2,24 @@ import 'dart:async';
 
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../core/app_routes.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/date_utils.dart';
 import '../../../core/services/feedback_service.dart';
 import '../../../core/services/theme_service.dart';
+import '../../../data/database_helper.dart';
+import '../../../data/xp_engine.dart';
 import '../../../models/checkin_result.dart';
+import '../../../screens/home_screen.dart';
+import '../../../services/gemma_service.dart';
+import '../../../widgets/insight_card.dart';
+import '../../../widgets/level_up_dialog.dart';
+import '../../../widgets/xp_overlay.dart';
 import '../daily_insight.dart';
 import '../micro_interactions.dart';
 import '../mood_catalog.dart';
@@ -31,6 +42,9 @@ class _MindResultScreenState extends State<MindResultScreen> {
   bool _showXpFloat = false;
   bool _showCardPulse = false;
   bool _showFullCelebration = false;
+  InsightState _insightState = InsightState.idle;
+  String? _insightText;
+  bool _didProcessEntry = false;
 
   Timer? _xpTimer;
   Timer? _pulseTimer;
@@ -73,6 +87,74 @@ class _MindResultScreenState extends State<MindResultScreen> {
         });
         _confettiController.play();
       }
+
+      unawaited(_processEnhancedEntry());
+    });
+  }
+
+  Future<void> _processEnhancedEntry() async {
+    if (_didProcessEntry) {
+      return;
+    }
+    _didProcessEntry = true;
+
+    final todayDateString = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final prefs = await SharedPreferences.getInstance();
+    final previousXP = prefs.getInt('total_xp') ?? 0;
+
+    await DatabaseHelper.instance.insertEntry({
+      'id': const Uuid().v4(),
+      'mood_id': widget.mood.id,
+      'custom_label': widget.mood.isCustom ? widget.mood.label : null,
+      'intensity': widget.result.log.intensity,
+      'note': widget.result.log.note.trim().isEmpty ? null : widget.result.log.note,
+      'timestamp': DateTime.now().toIso8601String(),
+      'date': todayDateString,
+    });
+
+    await XPEngine.updateStreak();
+
+    final xpGained = await XPEngine.processEntry(
+      intensity: widget.result.log.intensity,
+      hasNote: widget.result.log.note.trim().isNotEmpty,
+      date: todayDateString,
+    );
+
+    if (mounted && xpGained > 0) {
+      XPOverlay.show(context, xpGained, widget.mood.color);
+    }
+
+    final newXP = prefs.getInt('total_xp') ?? previousXP;
+    final previousLevel = XPEngine.calculateLevel(previousXP);
+    final newLevel = XPEngine.calculateLevel(newXP);
+    if (mounted && newLevel > previousLevel) {
+      await showLevelUpDialog(context, newLevel);
+    }
+
+    final aiEnabled = prefs.getBool('ai_insights_enabled') ?? true;
+    final insightMode = prefs.getString('insight_mode') ?? InsightMode.instant.name;
+    if (!aiEnabled || insightMode != InsightMode.instant.name) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _insightState = InsightState.loading);
+    }
+
+    final insight = await GemmaService.instance.instantInsight(
+      moodLabel: widget.mood.label,
+      intensity: widget.result.log.intensity,
+      note: widget.result.log.note.trim().isEmpty ? null : widget.result.log.note,
+    );
+    await DatabaseHelper.instance.saveInsight(todayDateString, instant: insight);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _insightState = InsightState.done;
+      _insightText = insight;
     });
   }
 
@@ -153,6 +235,14 @@ class _MindResultScreenState extends State<MindResultScreen> {
                             palette: palette,
                             showCardPulse: _showCardPulse,
                             showXpFloat: _showXpFloat,
+                            insightState: _insightState,
+                            insightText: _insightText,
+                            onDismissInsight: () {
+                              if (!mounted) {
+                                return;
+                              }
+                              setState(() => _insightState = InsightState.idle);
+                            },
                           ),
                         ),
                         IgnorePointer(
@@ -184,7 +274,10 @@ class _MindResultScreenState extends State<MindResultScreen> {
                     AnimatedActionButton(
                       label: 'Back to dashboard',
                       onPressed: () {
-                        Navigator.of(context).popUntil((route) => route.isFirst);
+                        Navigator.of(context).pushAndRemoveUntil(
+                          buildAppRoute(const HomeScreen()),
+                          (route) => false,
+                        );
                       },
                     ),
                   ],
@@ -205,6 +298,9 @@ class _ResultCard extends StatelessWidget {
     required this.palette,
     required this.showCardPulse,
     required this.showXpFloat,
+    required this.insightState,
+    required this.insightText,
+    required this.onDismissInsight,
   });
 
   final MoodOption mood;
@@ -212,6 +308,9 @@ class _ResultCard extends StatelessWidget {
   final AppThemePalette palette;
   final bool showCardPulse;
   final bool showXpFloat;
+  final InsightState insightState;
+  final String? insightText;
+  final VoidCallback onDismissInsight;
 
   @override
   Widget build(BuildContext context) {
@@ -403,6 +502,15 @@ class _ResultCard extends StatelessWidget {
                 ],
               ),
             ),
+            if (insightState != InsightState.idle) ...[
+              const SizedBox(height: 14),
+              InsightCard(
+                state: insightState,
+                insightText: insightText,
+                moodColor: mood.color,
+                onDismiss: onDismissInsight,
+              ),
+            ],
             if (result.leveledUp) ...[
               const SizedBox(height: 14),
               Container(

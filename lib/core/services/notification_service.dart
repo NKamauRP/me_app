@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
 import 'theme_service.dart';
 
@@ -9,11 +11,9 @@ class NotificationService {
 
   static final NotificationService instance = NotificationService._();
 
-  static const int _reminderNotificationId = 4101;
-  static const String _channelId = 'mind_me_reminders';
-  static const String _channelName = 'Mind Me reminders';
-  static const String _channelDescription =
-      'Gentle reminders to log your mood in ME.';
+  static const int _dailyReminderId = 4101;
+  static const String _channelId = 'mood_reminder';
+  static const String _channelName = 'Mood reminder';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -25,12 +25,14 @@ class NotificationService {
       return;
     }
 
+    tz.initializeTimeZones();
+
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initializationSettings = InitializationSettings(
       android: androidSettings,
     );
 
-    await _plugin.initialize(settings: initializationSettings);
+    await _plugin.initialize(initializationSettings);
     _initialized = true;
     await syncWithPreferences();
   }
@@ -40,14 +42,12 @@ class NotificationService {
       return;
     }
 
-    if (!ThemeService.instance.notificationsEnabled) {
-      await cancelMoodReminders();
+    if (!ThemeService.instance.dailyReminderEnabled) {
+      await cancelAllScheduled();
       return;
     }
 
-    await scheduleMoodReminders(
-      ThemeService.instance.notificationFrequency,
-    );
+    await scheduleDailyReminder();
   }
 
   Future<bool> requestPermissionIfNeeded() async {
@@ -59,67 +59,53 @@ class NotificationService {
         _plugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
 
-    final granted =
+    final notificationPermission =
         await androidImplementation?.requestNotificationsPermission();
+    await androidImplementation?.requestExactAlarmsPermission();
 
-    return granted ?? true;
+    return notificationPermission ?? true;
   }
 
-  Future<void> scheduleMoodReminders(
-    NotificationReminderFrequency frequency,
-  ) async {
+  Future<void> scheduleDailyReminder() async {
     if (!_initialized || !Platform.isAndroid) {
       return;
     }
 
-    await cancelMoodReminders();
+    await cancelAllScheduled();
 
     const androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
-      channelDescription: _channelDescription,
       importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
     );
-    const notificationDetails = NotificationDetails(android: androidDetails);
 
-    await _plugin.periodicallyShowWithDuration(
-      id: _reminderNotificationId,
-      title: 'Mind Me reminder',
-      body: _bodyForFrequency(frequency),
-      repeatDurationInterval: _durationForFrequency(frequency),
-      notificationDetails: notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+    await _plugin.zonedSchedule(
+      _dailyReminderId,
+      'Mind Me reminder',
+      'Take a moment to log how you feel today.',
+      _nextNinePm(),
+      const NotificationDetails(android: androidDetails),
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
-  Future<void> cancelMoodReminders() async {
+  Future<void> cancelAllScheduled() async {
     if (!_initialized || !Platform.isAndroid) {
       return;
     }
 
-    await _plugin.cancel(id: _reminderNotificationId);
+    await _plugin.cancelAll();
   }
 
-  Duration _durationForFrequency(NotificationReminderFrequency frequency) {
-    switch (frequency) {
-      case NotificationReminderFrequency.hourly:
-        return const Duration(hours: 1);
-      case NotificationReminderFrequency.threeTimesDaily:
-        return const Duration(hours: 8);
-      case NotificationReminderFrequency.fiveTimesDaily:
-        return const Duration(hours: 4, minutes: 48);
+  tz.TZDateTime _nextNinePm() {
+    final now = DateTime.now();
+    var scheduled = DateTime(now.year, now.month, now.day, 21);
+    if (!scheduled.isAfter(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
     }
-  }
-
-  String _bodyForFrequency(NotificationReminderFrequency frequency) {
-    switch (frequency) {
-      case NotificationReminderFrequency.hourly:
-        return 'Pause for a quick check-in whenever it feels right.';
-      case NotificationReminderFrequency.threeTimesDaily:
-        return 'A gentle reminder to notice your mood and log a short reflection.';
-      case NotificationReminderFrequency.fiveTimesDaily:
-        return 'Take a small moment for yourself and capture how you feel.';
-    }
+    return tz.TZDateTime.from(scheduled, tz.local);
   }
 }

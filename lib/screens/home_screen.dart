@@ -1,19 +1,27 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_routes.dart';
 import '../core/app_theme.dart';
 import '../core/services/theme_service.dart';
+import '../data/database_helper.dart';
+import '../data/mood_aggregator.dart';
 import '../features/mind/daily_insight.dart';
 import '../features/mind/micro_interactions.dart';
 import '../features/mind/mood_catalog.dart';
 import '../features/mind/providers/mind_me_provider.dart';
 import '../features/mind/screens/mood_history_screen.dart';
 import '../features/mind/screens/mood_selection_screen.dart';
+import '../services/gemma_service.dart';
 import '../features/settings/settings_screen.dart';
 import '../services/update_service.dart';
+import '../widgets/entry_timeline.dart';
+import '../widgets/insight_card.dart';
+import 'profile_screen.dart';
 import '../shared/widgets/glass_panel.dart';
 import '../shared/widgets/main_cta.dart';
 import '../shared/widgets/progress_card.dart';
@@ -27,6 +35,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _didCheckForUpdates = false;
+  List<Map<String, dynamic>> _todayEntries = const [];
+  InsightState _insightState = InsightState.idle;
+  String? _insightText;
+  bool _loadingExtras = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDashboardExtras();
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -47,15 +67,96 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openMindMe() {
-    Navigator.of(context).push(
+    Navigator.of(context)
+        .push(
       buildAppRoute(const MoodSelectionScreen()),
-    );
+    )
+        .then((_) => _loadDashboardExtras());
+  }
+
+  Future<void> _loadDashboardExtras() async {
+    if (_loadingExtras) {
+      return;
+    }
+
+    _loadingExtras = true;
+    try {
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final entries = await DatabaseHelper.instance.getEntriesForDate(today);
+      final prefs = await SharedPreferences.getInstance();
+      final settings = ThemeService.instance;
+      final savedInsight = await DatabaseHelper.instance.getInsight(today);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _todayEntries = entries;
+        if (settings.insightMode == InsightMode.daily &&
+            settings.aiInsightsEnabled &&
+            (savedInsight?['daily_insight'] as String?)?.trim().isNotEmpty ==
+                true) {
+          _insightState = InsightState.done;
+          _insightText = savedInsight?['daily_insight'] as String?;
+        } else {
+          _insightState = InsightState.idle;
+          _insightText = null;
+        }
+      });
+
+      if (!prefs.containsKey('total_xp')) {
+        await prefs.setInt('total_xp', 0);
+      }
+    } finally {
+      _loadingExtras = false;
+    }
   }
 
   void _showComingSoon() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Coming Soon')),
     );
+  }
+
+  Future<void> _getTodaysInsight() async {
+    final settings = ThemeService.instance;
+    if (!settings.aiInsightsEnabled) {
+      return;
+    }
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    setState(() => _insightState = InsightState.loading);
+
+    final prefs = await SharedPreferences.getInstance();
+    final streak = prefs.getInt('streak_days') ?? 0;
+    final aggregate = await MoodAggregator.aggregateDay(today);
+
+    if (aggregate == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _insightState = InsightState.idle);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Log at least one mood first.')),
+      );
+      return;
+    }
+
+    final insight = await GemmaService.instance.dailyInsight(
+      aggregate: aggregate,
+      streakDays: streak,
+    );
+    await DatabaseHelper.instance.saveInsight(today, daily: insight);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _insightState = InsightState.done;
+      _insightText = insight;
+    });
   }
 
   @override
@@ -68,6 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ? null
             : moodOptionById(provider.todayLog!.mood);
         final palette = AppTheme.paletteOf(settings.currentTheme);
+        final moodMap = _buildMoodMap();
 
         return Scaffold(
           body: Container(
@@ -83,7 +185,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: SafeArea(
               child: RefreshIndicator(
-                onRefresh: provider.refresh,
+                onRefresh: () async {
+                  await provider.refresh();
+                  await _loadDashboardExtras();
+                },
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
                   children: [
@@ -103,10 +208,56 @@ class _HomeScreenState extends State<HomeScreen> {
                         onOpenSettings: () {
                           Navigator.of(context).push(
                             buildAppRoute(const SettingsScreen()),
+                          ).then((_) => _loadDashboardExtras());
+                        },
+                        onOpenProfile: () {
+                          Navigator.of(context).push(
+                            buildAppRoute(const ProfileScreen()),
                           );
                         },
                       ),
                     ),
+                    const SizedBox(height: 18),
+                    RevealOnBuild(
+                      offset: const Offset(0, 10),
+                      duration: const Duration(milliseconds: 420),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Today',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 10),
+                          EntryTimeline(
+                            entries: _todayEntries,
+                            moodMap: moodMap,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (settings.insightMode == InsightMode.daily &&
+                        settings.aiInsightsEnabled) ...[
+                      const SizedBox(height: 18),
+                      InsightCard(
+                        state: _insightState,
+                        insightText: _insightText,
+                        moodColor: todayMood?.color ?? palette.accent,
+                        onDismiss: () {
+                          setState(() => _insightState = InsightState.idle);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _insightState == InsightState.loading ? null : _getTodaysInsight,
+                          icon: const Icon(Icons.auto_awesome_rounded),
+                          label: const Text('Get today\'s insight'),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     RevealOnBuild(
                       offset: const Offset(0, 18),
@@ -232,6 +383,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.subtitle,
     required this.onOpenHistory,
     required this.onOpenSettings,
+    required this.onOpenProfile,
   });
 
   final int streak;
@@ -239,6 +391,7 @@ class _DashboardHeader extends StatelessWidget {
   final String subtitle;
   final VoidCallback onOpenHistory;
   final VoidCallback onOpenSettings;
+  final VoidCallback onOpenProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -287,6 +440,11 @@ class _DashboardHeader extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             IconButton.filledTonal(
+              onPressed: onOpenProfile,
+              icon: const Icon(Icons.person_rounded),
+            ),
+            const SizedBox(height: 8),
+            IconButton.filledTonal(
               onPressed: onOpenSettings,
               icon: const Icon(Icons.tune_rounded),
             ),
@@ -295,6 +453,17 @@ class _DashboardHeader extends StatelessWidget {
       ],
     );
   }
+}
+
+Map<String, Map<String, dynamic>> _buildMoodMap() {
+  return {
+    for (final mood in mindMoodOptions)
+      mood.id: {
+        'emoji': mood.emoji,
+        'label': mood.label,
+        'color': mood.color,
+      },
+  };
 }
 
 class _HeaderChip extends StatelessWidget {

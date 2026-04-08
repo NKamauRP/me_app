@@ -14,6 +14,9 @@ class ThemeService extends ChangeNotifier {
   static const String _backgroundMusicKey = 'background_music_enabled';
   static const String _notificationsEnabledKey = 'notifications_enabled';
   static const String _notificationFrequencyKey = 'notification_frequency';
+  static const String _aiInsightsEnabledKey = 'ai_insights_enabled';
+  static const String _insightModeKey = 'insight_mode';
+  static const String _dailyReminderEnabledKey = 'daily_reminder_enabled';
 
   SharedPreferences? _preferences;
   AppThemePreset _currentTheme = AppThemePreset.calm;
@@ -23,6 +26,9 @@ class ThemeService extends ChangeNotifier {
   bool _notificationsEnabled = false;
   NotificationReminderFrequency _notificationFrequency =
       NotificationReminderFrequency.threeTimesDaily;
+  bool _aiInsightsEnabled = true;
+  InsightMode _insightMode = InsightMode.instant;
+  bool _dailyReminderEnabled = false;
 
   AppThemePreset get currentTheme => _currentTheme;
   bool get soundEnabled => _soundEnabled;
@@ -31,10 +37,17 @@ class ThemeService extends ChangeNotifier {
   bool get notificationsEnabled => _notificationsEnabled;
   NotificationReminderFrequency get notificationFrequency =>
       _notificationFrequency;
+  bool get aiInsightsEnabled => _aiInsightsEnabled;
+  InsightMode get insightMode => _insightMode;
+  bool get dailyReminderEnabled => _dailyReminderEnabled;
   ThemeData get themeData => AppTheme.themeFor(_currentTheme);
 
   Future<void> initialize() async {
     _preferences ??= await SharedPreferences.getInstance();
+    await reloadPreferences(notify: false);
+  }
+
+  Future<void> reloadPreferences({bool notify = true}) async {
     _currentTheme = _themeFromName(
       _preferences?.getString(_themeKey) ?? AppThemePreset.calm.name,
     );
@@ -48,6 +61,16 @@ class ThemeService extends ChangeNotifier {
       _preferences?.getString(_notificationFrequencyKey) ??
           NotificationReminderFrequency.threeTimesDaily.name,
     );
+    _aiInsightsEnabled = _preferences?.getBool(_aiInsightsEnabledKey) ?? true;
+    _insightMode = _insightModeFromName(
+      _preferences?.getString(_insightModeKey) ?? InsightMode.instant.name,
+    );
+    _dailyReminderEnabled =
+        _preferences?.getBool(_dailyReminderEnabledKey) ?? false;
+
+    if (notify) {
+      notifyListeners();
+    }
   }
 
   Future<void> setTheme(AppThemePreset preset) async {
@@ -112,6 +135,36 @@ class ThemeService extends ChangeNotifier {
     await _preferences?.setString(_notificationFrequencyKey, frequency.name);
   }
 
+  Future<void> setAiInsightsEnabled(bool enabled) async {
+    if (_aiInsightsEnabled == enabled) {
+      return;
+    }
+
+    _aiInsightsEnabled = enabled;
+    notifyListeners();
+    await _preferences?.setBool(_aiInsightsEnabledKey, enabled);
+  }
+
+  Future<void> setInsightMode(InsightMode mode) async {
+    if (_insightMode == mode) {
+      return;
+    }
+
+    _insightMode = mode;
+    notifyListeners();
+    await _preferences?.setString(_insightModeKey, mode.name);
+  }
+
+  Future<void> setDailyReminderEnabled(bool enabled) async {
+    if (_dailyReminderEnabled == enabled) {
+      return;
+    }
+
+    _dailyReminderEnabled = enabled;
+    notifyListeners();
+    await _preferences?.setBool(_dailyReminderEnabledKey, enabled);
+  }
+
   AppThemePreset _themeFromName(String value) {
     return AppThemePreset.values.firstWhere(
       (preset) => preset.name == value,
@@ -125,10 +178,22 @@ class ThemeService extends ChangeNotifier {
       orElse: () => NotificationReminderFrequency.threeTimesDaily,
     );
   }
+
+  InsightMode _insightModeFromName(String value) {
+    return InsightMode.values.firstWhere(
+      (mode) => mode.name == value,
+      orElse: () => InsightMode.instant,
+    );
+  }
 }
 
 enum NotificationReminderFrequency {
   hourly,
   threeTimesDaily,
   fiveTimesDaily,
+}
+
+enum InsightMode {
+  instant,
+  daily,
 }

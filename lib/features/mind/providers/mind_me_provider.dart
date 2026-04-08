@@ -63,7 +63,9 @@ class MindMeProvider extends ChangeNotifier {
       _weeklyLogs = await _loadWeeklyLogs(DateTime.now());
       _errorMessage = null;
       _hasLoadedOnce = true;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('MindMeProvider.refresh failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
       _errorMessage = 'Unable to load your journal right now.';
     } finally {
       _setLoading(false);
@@ -163,7 +165,9 @@ class MindMeProvider extends ChangeNotifier {
           leveledUp: reward.leveledUp,
         ),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('MindMeProvider.submitMood failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
       _errorMessage = 'Your check-in could not be saved.';
       rethrow;
     } finally {

@@ -8,12 +8,14 @@ import 'core/services/theme_service.dart';
 import 'db/app_database.dart';
 import 'features/mind/providers/mind_me_provider.dart';
 import 'screens/splash_screen.dart';
+import 'services/gemma_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeService.instance.initialize();
   await AudioService.instance.initialize();
   await NotificationService.instance.initialize();
+  await GemmaService.instance.initialise();
 
   runApp(
     MultiProvider(

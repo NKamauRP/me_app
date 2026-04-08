@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -13,9 +15,6 @@ import 'services/gemma_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeService.instance.initialize();
-  await AudioService.instance.initialize();
-  await NotificationService.instance.initialize();
-  await GemmaService.instance.initialise();
 
   runApp(
     MultiProvider(
@@ -30,6 +29,28 @@ Future<void> main() async {
       child: const MeApp(),
     ),
   );
+
+  unawaited(_warmStartupServices());
+}
+
+Future<void> _warmStartupServices() async {
+  try {
+    await AudioService.instance.initialize();
+  } catch (error) {
+    debugPrint('AudioService startup failed: $error');
+  }
+
+  try {
+    await NotificationService.instance.initialize();
+  } catch (error) {
+    debugPrint('NotificationService startup failed: $error');
+  }
+
+  try {
+    await GemmaService.instance.initialise();
+  } catch (error) {
+    debugPrint('GemmaService startup failed: $error');
+  }
 }
 
 class MeApp extends StatelessWidget {

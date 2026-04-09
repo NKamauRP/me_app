@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -14,6 +15,7 @@ class NotificationService {
   static const int _dailyReminderId = 4101;
   static const String _channelId = 'mood_reminder';
   static const String _channelName = 'Mood reminder';
+  static const String _lastTipKey = 'last_generated_ai_tip';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -47,7 +49,9 @@ class NotificationService {
       return;
     }
 
-    await scheduleDailyReminder();
+    final prefs = await SharedPreferences.getInstance();
+    final lastTip = prefs.getString(_lastTipKey);
+    await scheduleDailyReminder(customMessage: lastTip);
   }
 
   Future<bool> requestPermissionIfNeeded() async {
@@ -66,12 +70,15 @@ class NotificationService {
     return notificationPermission ?? true;
   }
 
-  Future<void> scheduleDailyReminder() async {
+  Future<void> scheduleDailyReminder({String? customMessage}) async {
     if (!_initialized || !Platform.isAndroid) {
       return;
     }
 
-    await cancelAllScheduled();
+    if (customMessage != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastTipKey, customMessage);
+    }
 
     const androidDetails = AndroidNotificationDetails(
       _channelId,
@@ -81,8 +88,8 @@ class NotificationService {
 
     await _plugin.zonedSchedule(
       _dailyReminderId,
-      'Mind Me reminder',
-      'Take a moment to log how you feel today.',
+      'Your Daily Reflection',
+      customMessage ?? 'Take a moment to log how you feel today.',
       _nextNinePm(),
       const NotificationDetails(android: androidDetails),
       uiLocalNotificationDateInterpretation:

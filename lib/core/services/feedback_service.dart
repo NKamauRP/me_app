@@ -71,4 +71,14 @@ class FeedbackService {
       confettiStyle: FeedbackConfettiStyle.levelUp,
     );
   }
+
+  FeedbackCue checkInSuccess() {
+    unawaited(HapticsService.instance.lightImpact());
+    unawaited(SoundService.instance.playTap());
+
+    return const FeedbackCue(
+      cardPulse: true,
+      confettiStyle: FeedbackConfettiStyle.streakBurst,
+    );
+  }
 }

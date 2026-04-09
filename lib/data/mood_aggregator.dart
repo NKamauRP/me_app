@@ -60,4 +60,39 @@ class MoodAggregator {
       entryCount: entries.length,
     );
   }
+
+  static Future<Map<String, dynamic>?> aggregateRange(int days) async {
+    final entries = await DatabaseHelper.instance.getAllEntries();
+    if (entries.isEmpty) return null;
+
+    final cutoff = DateTime.now().subtract(Duration(days: days));
+    final relevant = entries.where((e) {
+      final ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
+      return ts != null && ts.isAfter(cutoff);
+    }).toList();
+
+    if (relevant.isEmpty) return null;
+
+    final counts = <String, int>{};
+    double totalIntensity = 0;
+    final notes = <String>[];
+
+    for (final entry in relevant) {
+      final id = entry['mood_id'] as String;
+      counts[id] = (counts[id] ?? 0) + 1;
+      totalIntensity += entry['intensity'] as int;
+      final note = entry['note'] as String?;
+      if (note != null && note.trim().isNotEmpty) notes.add(note);
+    }
+
+    final dominantMood = counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+
+    return {
+      'dominantMood': dominantMood,
+      'avgIntensity': (totalIntensity / relevant.length).toStringAsFixed(1),
+      'entryCount': relevant.length,
+      'notes': notes.take(10).toList(), // Limit notes to avoid prompt bloat
+      'moodDistribution': counts,
+    };
+  }
 }

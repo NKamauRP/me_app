@@ -80,7 +80,7 @@ class InsightCard extends StatelessWidget {
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: switch (state) {
-                InsightState.loading => const _TypingDots(),
+                InsightState.loading => const TypingDots(),
                 InsightState.done || InsightState.error => Text(
                     effectiveText,
                     key: ValueKey<String>(effectiveText),
@@ -110,14 +110,14 @@ class InsightCard extends StatelessWidget {
   }
 }
 
-class _TypingDots extends StatefulWidget {
-  const _TypingDots();
+class TypingDots extends StatefulWidget {
+  const TypingDots({super.key});
 
   @override
-  State<_TypingDots> createState() => _TypingDotsState();
+  State<TypingDots> createState() => _TypingDotsState();
 }
 
-class _TypingDotsState extends State<_TypingDots>
+class _TypingDotsState extends State<TypingDots>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,

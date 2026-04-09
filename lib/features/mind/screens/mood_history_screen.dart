@@ -29,7 +29,9 @@ class _MoodHistoryScreenState extends State<MoodHistoryScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_handleScroll);
-    _loadInitialHistory();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialHistory();
+    });
   }
 
   @override

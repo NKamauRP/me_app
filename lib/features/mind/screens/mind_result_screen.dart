@@ -11,12 +11,13 @@ import '../../../core/app_routes.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/date_utils.dart';
 import '../../../core/services/feedback_service.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/services/theme_service.dart';
 import '../../../data/database_helper.dart';
 import '../../../data/xp_engine.dart';
 import '../../../models/checkin_result.dart';
 import '../../../screens/home_screen.dart';
-import '../../../services/gemma_service.dart';
+import '../../../services/ai_service.dart';
 import '../../../widgets/insight_card.dart';
 import '../../../widgets/level_up_dialog.dart';
 import '../../../widgets/xp_overlay.dart';
@@ -141,7 +142,7 @@ class _MindResultScreenState extends State<MindResultScreen> {
       setState(() => _insightState = InsightState.loading);
     }
 
-    final insight = await GemmaService.instance.instantInsight(
+    final insight = await AiService.instance.instantInsight(
       moodLabel: widget.mood.label,
       intensity: widget.result.log.intensity,
       note: widget.result.log.note.trim().isEmpty ? null : widget.result.log.note,
@@ -156,6 +157,18 @@ class _MindResultScreenState extends State<MindResultScreen> {
       _insightState = InsightState.done;
       _insightText = insight;
     });
+
+    // Generate and schedule a tip for tomorrow's reminder
+    if (ThemeService.instance.dailyReminderEnabled) {
+      try {
+        final tip = await AiService.instance.generateDailyTip(
+          lastMood: widget.mood.label,
+        );
+        await NotificationService.instance.scheduleDailyReminder(customMessage: tip);
+      } catch (e) {
+        debugPrint('Failed to schedule tip notification: $e');
+      }
+    }
   }
 
   FeedbackCue? _rewardCueForResult() {
@@ -167,7 +180,7 @@ class _MindResultScreenState extends State<MindResultScreen> {
       return FeedbackService.instance.streakMilestone();
     }
 
-    return null;
+    return FeedbackService.instance.checkInSuccess();
   }
 
   void _startXpFloat() {

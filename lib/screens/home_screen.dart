@@ -16,12 +16,13 @@ import '../features/mind/mood_catalog.dart';
 import '../features/mind/providers/mind_me_provider.dart';
 import '../features/mind/screens/mood_history_screen.dart';
 import '../features/mind/screens/mood_selection_screen.dart';
-import '../services/gemma_service.dart';
+import '../services/ai_service.dart';
 import '../features/settings/settings_screen.dart';
 import '../services/update_service.dart';
 import '../widgets/entry_timeline.dart';
 import '../widgets/insight_card.dart';
 import 'profile_screen.dart';
+import 'companion_screen.dart';
 import '../shared/widgets/glass_panel.dart';
 import '../shared/widgets/main_cta.dart';
 import '../shared/widgets/progress_card.dart';
@@ -113,6 +114,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _openMindCompanion() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const CompanionScreen()),
+    );
+  }
+
   void _showComingSoon() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Coming Soon')),
@@ -143,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final insight = await GemmaService.instance.dailyInsight(
+    final insight = await AiService.instance.dailyInsight(
       aggregate: aggregate,
       streakDays: streak,
     );
@@ -331,14 +338,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onTap: _openMindMe,
                               ),
                               _DashboardModuleTile(
-                                title: 'Healthy Me',
-                                subtitle: 'Coming Soon',
-                                badge: 'Soon',
-                                icon: Icons.favorite_rounded,
-                                accentColor: palette.textMuted,
-                                enabled: false,
-                                highlighted: false,
-                                onTap: _showComingSoon,
+                                title: 'Mind Companion',
+                                subtitle: 'On-device chat',
+                                badge: 'New',
+                                icon: Icons.chat_bubble_outline_rounded,
+                                accentColor: palette.seed,
+                                enabled: true,
+                                highlighted: true,
+                                onTap: _openMindCompanion,
                               ),
                               _DashboardModuleTile(
                                 title: 'Work Me',

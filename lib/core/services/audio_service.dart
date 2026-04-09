@@ -60,6 +60,20 @@ class AudioService {
     );
   }
 
+  Future<void> pause() async {
+    if (!_initialized || _backgroundPlayer.state != PlayerState.playing) {
+      return;
+    }
+    await _backgroundPlayer.pause();
+  }
+
+  Future<void> resume() async {
+    if (!_initialized || !ThemeService.instance.backgroundMusicEnabled) {
+      return;
+    }
+    await ensureLooping();
+  }
+
   Future<void> stop() async {
     if (!_initialized) {
       return;

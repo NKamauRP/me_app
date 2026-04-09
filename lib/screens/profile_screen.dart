@@ -4,8 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/database_helper.dart';
+import '../data/mood_aggregator.dart';
 import '../data/xp_engine.dart';
 import '../features/mind/mood_catalog.dart';
+import '../services/ai_service.dart';
+import '../widgets/insight_card.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -24,10 +27,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<double> _weeklyAverages = List<double>.filled(7, 0);
   Set<String> _badgeIds = const {};
 
+  InsightState _weeklyState = InsightState.idle;
+  String? _weeklyText;
+  InsightState _monthlyState = InsightState.idle;
+  String? _monthlyText;
+
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadProfile();
+    });
   }
 
   Future<void> _loadProfile() async {
@@ -137,6 +147,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (consistent) ids.add('consistent');
 
     return ids;
+  }
+
+  Future<void> _fetchWeeklyInsight() async {
+    setState(() => _weeklyState = InsightState.loading);
+    try {
+      final aggregate = await MoodAggregator.aggregateRange(7);
+      if (aggregate == null) {
+        setState(() => _weeklyState = InsightState.idle);
+        return;
+      }
+      final result = await AiService.instance.weeklyInsight(aggregate: aggregate);
+      setState(() {
+        _weeklyState = InsightState.done;
+        _weeklyText = result;
+      });
+    } catch (e) {
+      setState(() => _weeklyState = InsightState.error);
+    }
+  }
+
+  Future<void> _fetchMonthlyInsight() async {
+    setState(() => _monthlyState = InsightState.loading);
+    try {
+      final aggregate = await MoodAggregator.aggregateRange(30);
+      if (aggregate == null) {
+        setState(() => _monthlyState = InsightState.idle);
+        return;
+      }
+      final result = await AiService.instance.monthlyInsight(aggregate: aggregate);
+      setState(() {
+        _monthlyState = InsightState.done;
+        _monthlyText = result;
+      });
+    } catch (e) {
+      setState(() => _monthlyState = InsightState.error);
+    }
   }
 
   @override
@@ -323,8 +369,110 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                   }).toList(),
                 ),
+                const SizedBox(height: 32),
+                Text(
+                  'Long-term Clarity',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 12),
+                Column(
+                  children: [
+                    _InsightTriggerCard(
+                      title: 'Weekly Summary',
+                      subtitle: 'Get an AI analysis of your emotional patterns over the last 7 days.',
+                      icon: Icons.calendar_view_week_rounded,
+                      state: _weeklyState,
+                      insightText: _weeklyText,
+                      onTrigger: _fetchWeeklyInsight,
+                      onDismiss: () => setState(() => _weeklyState = InsightState.idle),
+                    ),
+                    const SizedBox(height: 16),
+                    _InsightTriggerCard(
+                      title: 'Monthly Theme',
+                      subtitle: 'Identify the driving themes of your inner weather for the last 30 days.',
+                      icon: Icons.brightness_auto_rounded,
+                      state: _monthlyState,
+                      insightText: _monthlyText,
+                      onTrigger: _fetchMonthlyInsight,
+                      onDismiss: () => setState(() => _monthlyState = InsightState.idle),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
               ],
             ),
+    );
+  }
+}
+
+class _InsightTriggerCard extends StatelessWidget {
+  const _InsightTriggerCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.state,
+    required this.insightText,
+    required this.onTrigger,
+    required this.onDismiss,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final InsightState state;
+  final String? insightText;
+  final VoidCallback onTrigger;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state != InsightState.idle) {
+      return InsightCard(
+        state: state,
+        insightText: insightText,
+        moodColor: Theme.of(context).colorScheme.primary,
+        onDismiss: onDismiss,
+      );
+    }
+
+    return Card(
+      child: InkWell(
+        onTap: onTrigger,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

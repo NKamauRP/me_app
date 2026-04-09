@@ -1,4 +1,4 @@
-# MediaPipe / Gemma release shrinker warnings generated during release build.
+# MediaPipe / On-device AI release shrinker warnings generated during release build.
 -dontwarn com.google.mediapipe.proto.CalculatorProfileProto$CalculatorProfile
 -dontwarn com.google.mediapipe.proto.GraphTemplateProto$CalculatorGraphTemplate
 -dontwarn javax.lang.model.SourceVersion

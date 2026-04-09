@@ -75,6 +75,14 @@ class _MoodOptionCardState extends State<MoodOptionCard>
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isCompact = !widget.isWide && width < 400;
+    final emojiSize = isCompact ? 26.0 : 30.0;
+    final labelFontSize = isCompact ? 13.5 : 15.0;
+    final verticalPadding = widget.isWide ? 16.0 : (isCompact ? 8.0 : 12.0);
+    final horizontalPadding = widget.isWide ? 18.0 : (isCompact ? 8.0 : 10.0);
+    final labelSpacing = isCompact ? 6.0 : 10.0;
+    final checkmarkSpacing = isCompact ? 4.0 : 6.0;
     final selectedBorder = widget.mood.color;
     final neutralBorder = const Color(0xFFD9D9D9);
     final background = widget.isSelected
@@ -95,8 +103,8 @@ class _MoodOptionCardState extends State<MoodOptionCard>
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
           padding: EdgeInsets.symmetric(
-            horizontal: widget.isWide ? 18 : 12,
-            vertical: widget.isWide ? 16 : 14,
+            horizontal: horizontalPadding,
+            vertical: verticalPadding,
           ),
           decoration: BoxDecoration(
             color: background,
@@ -139,7 +147,6 @@ class _MoodOptionCardState extends State<MoodOptionCard>
               : Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 4),
                     AnimatedBuilder(
                       animation: _emojiScale,
                       builder: (context, _) {
@@ -147,24 +154,26 @@ class _MoodOptionCardState extends State<MoodOptionCard>
                           scale: _emojiScale.value,
                           child: Text(
                             widget.mood.emoji,
-                            style: const TextStyle(fontSize: 30),
+                            style: TextStyle(fontSize: emojiSize),
                           ),
                         );
                       },
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      widget.mood.label,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            height: 1.15,
-                          ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    SizedBox(height: labelSpacing),
+                    Flexible(
+                      child: Text(
+                        widget.mood.label,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontSize: labelFontSize,
+                              height: 1.12,
+                            ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: checkmarkSpacing),
                     AnimatedCheckmark(
                       visible: widget.isSelected,
                       color: widget.mood.color,

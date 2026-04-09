@@ -16,7 +16,7 @@ import '../data/database_helper.dart';
 import '../db/app_database.dart';
 import '../features/mind/mood_catalog.dart';
 import '../features/mind/providers/mind_me_provider.dart';
-import '../services/gemma_service.dart';
+import '../services/ai_service.dart';
 import '../shared/widgets/glass_panel.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -27,60 +27,112 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _modelDownloaded = false;
-  bool _isDownloadingModel = false;
+  AiModelVariant _selectedVariant = AiModelVariant.gemma4;
+  late Future<bool> _modelDownloaded;
+  late Future<Map<String, dynamic>> _modelMetadata;
+  bool _isDownloading = false;
   double _downloadProgress = 0;
+  DateTime? _downloadStartedAt;
 
   @override
   void initState() {
     super.initState();
-    _loadModelState();
+    _loadActiveVariant();
   }
 
-  Future<void> _loadModelState() async {
-    final downloaded = await GemmaService.instance.isModelDownloaded();
-    if (!mounted) {
-      return;
-    }
-    setState(() => _modelDownloaded = downloaded);
-  }
-
-  Future<void> _downloadModel() async {
+  Future<void> _loadActiveVariant() async {
+    final variant = await AiService.instance.getActiveVariant();
     setState(() {
-      _isDownloadingModel = true;
+      _selectedVariant = variant;
+      _modelDownloaded = AiService.instance.isModelDownloaded(variant);
+      _modelMetadata = AiService.instance.getModelMetadata(variant);
+    });
+  }
+
+  Future<void> _onVariantChanged(AiModelVariant? variant) async {
+    if (variant == null) return;
+    await AiService.instance.setActiveVariant(variant);
+    setState(() {
+      _selectedVariant = variant;
+      _modelDownloaded = AiService.instance.isModelDownloaded(variant);
+      _modelMetadata = AiService.instance.getModelMetadata(variant);
+    });
+  }
+
+  Future<void> _startDownload() async {
+    setState(() {
+      _isDownloading = true;
       _downloadProgress = 0;
+      _downloadStartedAt = DateTime.now();
     });
 
-    await GemmaService.instance.downloadModel(
+    await AiService.instance.downloadModel(
+      variant: _selectedVariant,
       onProgress: (value) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         setState(() => _downloadProgress = value);
       },
       onComplete: () {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         setState(() {
-          _isDownloadingModel = false;
-          _modelDownloaded = true;
+          _isDownloading = false;
+          _modelDownloaded = AiService.instance.isModelDownloaded(_selectedVariant);
+          _modelMetadata = AiService.instance.getModelMetadata(_selectedVariant);
           _downloadProgress = 1;
+          _downloadStartedAt = null;
         });
       },
       onError: (message) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         setState(() {
-          _isDownloadingModel = false;
+          _isDownloading = false;
           _downloadProgress = 0;
+          _downloadStartedAt = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Model download failed: $message')),
         );
       },
     );
+  }
+
+  String _formatDuration(Duration duration) {
+    if (duration.inHours > 0) {
+      final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+      return '${duration.inHours}h ${minutes}m';
+    }
+    if (duration.inMinutes > 0) {
+      final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+      return '${duration.inMinutes}m ${seconds}s';
+    }
+    return '${duration.inSeconds.clamp(0, 59)}s';
+  }
+
+  String _downloadStatusText(int? lastSpeed) {
+    final percentage = (_downloadProgress * 100).clamp(0, 100).round();
+    final startedAt = _downloadStartedAt;
+    
+    String speedText = '';
+    if (lastSpeed != null && lastSpeed > 0) {
+      speedText = lastSpeed > 1000 
+          ? ' | ${(lastSpeed / 1024).toStringAsFixed(1)} MB/s'
+          : ' | $lastSpeed KB/s';
+    }
+
+    if (startedAt == null || _downloadProgress <= 0) {
+      return '$percentage% downloaded$speedText';
+    }
+
+    final elapsed = DateTime.now().difference(startedAt);
+    if (elapsed.inSeconds < 2 || _downloadProgress >= 0.99) {
+      return '$percentage% downloaded$speedText';
+    }
+
+    final estimatedTotalSeconds = elapsed.inSeconds / _downloadProgress;
+    final remainingSeconds =
+        (estimatedTotalSeconds - elapsed.inSeconds).clamp(0, double.infinity).round();
+
+    return '$percentage% downloaded$speedText - about ${_formatDuration(Duration(seconds: remainingSeconds))} left';
   }
 
   Future<void> _exportMoodHistory() async {
@@ -143,7 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await AppDatabase.instance.clearAllData();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    await GemmaService.instance.reset();
+    await AiService.instance.reset();
     await ThemeService.instance.reloadPreferences();
     await AudioService.instance.updatePlaybackPreference();
     await NotificationService.instance.cancelAllScheduled();
@@ -159,9 +211,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const SnackBar(content: Text('All local data has been cleared.')),
     );
     setState(() {
-      _modelDownloaded = false;
+      _loadActiveVariant();
       _downloadProgress = 0;
-      _isDownloadingModel = false;
+      _isDownloading = false;
+      _downloadStartedAt = null;
     });
   }
 
@@ -192,8 +245,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('AI insights', style: theme.textTheme.titleLarge),
-                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text('AI Intelligence', style: theme.textTheme.titleLarge),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.auto_awesome_rounded, size: 14, color: Colors.green),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'ACTIVE',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Enable AI insights'),
@@ -230,41 +312,229 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('AI model'),
-                        subtitle: _ModelSubtitle(
-                          downloaded: _modelDownloaded,
-                          downloading: _isDownloadingModel,
-                          progress: _downloadProgress,
-                        ),
-                        trailing: _isDownloadingModel
-                            ? SizedBox(
-                                width: 36,
-                                height: 36,
-                                child: Center(
-                                  child: Text('${(_downloadProgress * 100).round()}%'),
-                                ),
-                              )
-                            : _modelDownloaded
-                                ? const Icon(
-                                    Icons.check_circle,
-                                    color: Colors.green,
-                                  )
-                                : ElevatedButton(
-                                    onPressed: _downloadModel,
-                                    child: const Text('Download'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                GlassPanel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text('System & Connectivity', style: theme.textTheme.titleLarge),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.link_rounded, size: 14, color: Colors.blue),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'LOCAL',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
                                   ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      if (!_modelDownloaded)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            'This model works best on devices with 3GB+ RAM.',
-                            style: theme.textTheme.bodySmall,
+                      const SizedBox(height: 16),
+                      // Privacy Guaranteed Banner
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.green.withValues(alpha: 0.1)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.shield_rounded, color: Colors.green, size: 20),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Privacy Verified',
+                                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'ME utilizes edge-intelligence. Your data never leaves your device.',
+                                    style: theme.textTheme.bodySmall?.copyWith(height: 1.3),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<AiModelVariant>(
+                        value: _selectedVariant,
+                        decoration: InputDecoration(
+                          labelText: 'On-Device Model (SLM)',
+                          labelStyle: TextStyle(color: palette.seed),
+                          filled: true,
+                          fillColor: palette.seed.withValues(alpha: 0.05),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
                           ),
                         ),
+                        items: AiModelVariant.values.map((variant) {
+                          return DropdownMenuItem(
+                            value: variant,
+                            child: Text(variant.label, style: theme.textTheme.bodyMedium),
+                          );
+                        }).toList(),
+                        onChanged: _isDownloading ? null : _onVariantChanged,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, size: 14, color: palette.seed.withValues(alpha: 0.6)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'At least 4GB RAM is recommended to prevent app crashes.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: palette.seed.withValues(alpha: 0.6),
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      FutureBuilder<List<dynamic>>(
+                        future: Future.wait([_modelDownloaded, _modelMetadata]),
+                        builder: (context, snapshot) {
+                          final downloaded = snapshot.data?[0] as bool? ?? false;
+                          final metadata = snapshot.data?[1] as Map<String, dynamic>? ?? {};
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: palette.seed.withValues(alpha: 0.05),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: palette.seed.withValues(alpha: 0.1)),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          downloaded ? Icons.check_circle_rounded : Icons.cloud_download_rounded,
+                                          color: downloaded ? Colors.green : palette.seed,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(_selectedVariant.label, style: theme.textTheme.titleMedium),
+                                              Text(
+                                                downloaded ? 'Offline model active' : 'Download required (~${_selectedVariant.estimate})',
+                                                style: theme.textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (!downloaded && !_isDownloading)
+                                          FilledButton.tonal(
+                                            onPressed: _startDownload,
+                                            child: const Text('Install'),
+                                          ),
+                                      ],
+                                    ),
+                                    if (downloaded) ...[
+                                      const Divider(height: 24),
+                                      _ModelDetailRow(label: 'Storage Path', value: metadata['path'] ?? '--'),
+                                      const SizedBox(height: 12),
+                                      _ModelDetailRow(label: 'Model Size', value: metadata['size'] ?? '--'),
+                                    ],
+                                    if (_isDownloading) ...[
+                                      const SizedBox(height: 20),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'INSTALLING ${_selectedVariant.name.toUpperCase()}',
+                                            style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 1),
+                                          ),
+                                          Text(
+                                            '${(_downloadProgress * 100).round()}%',
+                                            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900, color: palette.seed),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Stack(
+                                        children: [
+                                          Container(
+                                            height: 10,
+                                            width: double.infinity,
+                                            decoration: BoxDecoration(color: palette.seed.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(5)),
+                                          ),
+                                          AnimatedContainer(
+                                            duration: const Duration(milliseconds: 300),
+                                            height: 10,
+                                            width: (MediaQuery.of(context).size.width - 100) * _downloadProgress,
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(colors: [palette.seed, palette.accent]),
+                                              borderRadius: BorderRadius.circular(5),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.timer_outlined, size: 14, color: Colors.grey),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              'Downloading to local storage...',
+                                              style: theme.textTheme.bodySmall?.copyWith(color: palette.textMuted, fontWeight: FontWeight.w600),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -419,35 +689,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-class _ModelSubtitle extends StatelessWidget {
-  const _ModelSubtitle({
-    required this.downloaded,
-    required this.downloading,
-    required this.progress,
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({
+    required this.label,
+    required this.value,
   });
 
-  final bool downloaded;
-  final bool downloading;
-  final double progress;
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
-    if (downloaded) {
-      return const Text('Gemma 4 E2B - ready');
-    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+      ],
+    );
+  }
+}
 
-    if (downloading) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          LinearProgressIndicator(value: progress),
-          const SizedBox(height: 6),
-          Text('${(progress * 100).round()}%'),
-        ],
-      );
-    }
+class _ModelDetailRow extends StatelessWidget {
+  const _ModelDetailRow({
+    required this.label,
+    required this.value,
+  });
 
-    return const Text('Not downloaded - ~1.3 GB');
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: theme.textTheme.labelSmall?.copyWith(
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.5,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
   }
 }

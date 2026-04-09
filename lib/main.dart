@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/app_theme.dart';
 import 'core/services/audio_service.dart';
@@ -10,14 +9,50 @@ import 'core/services/theme_service.dart';
 import 'db/app_database.dart';
 import 'features/mind/providers/mind_me_provider.dart';
 import 'screens/splash_screen.dart';
-import 'services/gemma_service.dart';
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ThemeService.instance.initialize();
+  await SharedPreferences.getInstance();
+  runApp(const MyApp());
+}
 
-  runApp(
-    MultiProvider(
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ThemeService.instance.initialize();
+      await AudioService.instance.initialize();
+      await NotificationService.instance.initialize();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      AudioService.instance.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      AudioService.instance.resume();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
       providers: [
         ChangeNotifierProvider<ThemeService>.value(
           value: ThemeService.instance,
@@ -26,35 +61,13 @@ Future<void> main() async {
           create: (_) => MindMeProvider(database: AppDatabase.instance),
         ),
       ],
-      child: const MeApp(),
-    ),
-  );
-
-  unawaited(_warmStartupServices());
-}
-
-Future<void> _warmStartupServices() async {
-  try {
-    await AudioService.instance.initialize();
-  } catch (error) {
-    debugPrint('AudioService startup failed: $error');
-  }
-
-  try {
-    await NotificationService.instance.initialize();
-  } catch (error) {
-    debugPrint('NotificationService startup failed: $error');
-  }
-
-  try {
-    await GemmaService.instance.initialise();
-  } catch (error) {
-    debugPrint('GemmaService startup failed: $error');
+      child: const _AppView(),
+    );
   }
 }
 
-class MeApp extends StatelessWidget {
-  const MeApp({super.key});
+class _AppView extends StatelessWidget {
+  const _AppView();
 
   @override
   Widget build(BuildContext context) {

@@ -103,8 +103,11 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
           top: false,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final contentWidth = constraints.maxWidth - 40;
-              final crossAxisCount = contentWidth < 520 ? 3 : 4;
+              final screenWidth = constraints.maxWidth;
+              final crossAxisCount = screenWidth < 400 ? 3 : 4;
+              final crossAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
+              final mainAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
+              final childAspectRatio = screenWidth < 400 ? 0.85 : 0.95;
 
               return SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -133,9 +136,9 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
                         itemCount: _gridMoods.length,
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: crossAxisCount,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 0.9,
+                          crossAxisSpacing: crossAxisSpacing,
+                          mainAxisSpacing: mainAxisSpacing,
+                          childAspectRatio: childAspectRatio,
                         ),
                         itemBuilder: (context, index) {
                           final mood = _gridMoods[index];

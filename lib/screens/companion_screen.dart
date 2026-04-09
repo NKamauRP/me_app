@@ -22,6 +22,8 @@ class _CompanionScreenState extends State<CompanionScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _isThinking = false;
+  bool _isModelReady = false;
+  String _modelLabel = 'AI Model';
 
   @override
   void initState() {
@@ -32,6 +34,17 @@ class _CompanionScreenState extends State<CompanionScreen> {
         content: "Hello! I'm ME, your mindful companion. How are you feeling right now?",
       ),
     );
+    _loadModelStatus();
+  }
+
+  Future<void> _loadModelStatus() async {
+    final variant = await AiService.instance.getActiveVariant();
+    final ready = await AiService.instance.isModelDownloaded(variant);
+    if (!mounted) return;
+    setState(() {
+      _isModelReady = ready;
+      _modelLabel = variant.label;
+    });
   }
 
   void _scrollToBottom() {
@@ -105,37 +118,27 @@ class _CompanionScreenState extends State<CompanionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Mind Companion'),
-            FutureBuilder<AiModelVariant>(
-              future: AiService.instance.getActiveVariant(),
-              builder: (context, variantSnapshot) {
-                final variant = variantSnapshot.data ?? AiModelVariant.gemma4;
-                return FutureBuilder<bool>(
-                  future: AiService.instance.isModelDownloaded(variant),
-                  builder: (context, snapshot) {
-                    final isReady = snapshot.data ?? false;
-                    return Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: isReady ? Colors.greenAccent : Colors.orangeAccent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          isReady ? 'On-device AI Active' : 'AI Model Not Ready',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontSize: 10,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
+            Row(
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: _isModelReady ? Colors.greenAccent : Colors.orangeAccent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _isModelReady
+                      ? '$_modelLabel · On-device'
+                      : 'AI Model Not Installed',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 10,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

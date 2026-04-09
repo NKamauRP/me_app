@@ -132,6 +132,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _deleteAllData() async {
+    // Capture context-dependent refs before any async gap
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<MindMeProvider>();
+
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -163,18 +167,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await ThemeService.instance.reloadPreferences();
     await AudioService.instance.updatePlaybackPreference();
     await NotificationService.instance.cancelAllScheduled();
-    if (mounted) {
-      await context.read<MindMeProvider>().refresh();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All local data has been cleared.')),
-      );
-      setState(() {
-        _isModelDownloaded = false;
-        _downloadProgress = 0;
-        _isDownloading = false;
-      });
-      await _loadModelState();
-    }
+    await provider.refresh();
+
+    if (!mounted) return;
+    messenger.showSnackBar(
+      const SnackBar(content: Text('All local data has been cleared.')),
+    );
+    setState(() {
+      _isModelDownloaded = false;
+      _downloadProgress = 0;
+      _isDownloading = false;
+    });
+    await _loadModelState();
   }
 
   @override
@@ -349,8 +353,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 16),
                       // Model dropdown
-                      DropdownButtonFormField<AiModelVariant>(
-                        value: _selectedVariant,
+                      InputDecorator(
                         decoration: InputDecoration(
                           labelText: 'Select Model',
                           labelStyle: TextStyle(color: palette.seed),
@@ -360,19 +363,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
                           ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         ),
-                        items: AiModelVariant.values.map((variant) {
-                          return DropdownMenuItem(
-                            value: variant,
-                            child: Text(
-                              variant == AiModelVariant.gemma4
-                                  ? '${variant.label} (Recommended)'
-                                  : variant.label,
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: _isDownloading ? null : _onVariantChanged,
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<AiModelVariant>(
+                            value: _selectedVariant,
+                            isExpanded: true,
+                            items: AiModelVariant.values.map((variant) {
+                              return DropdownMenuItem(
+                                value: variant,
+                                child: Text(
+                                  variant == AiModelVariant.gemma4
+                                      ? '${variant.label} (Recommended)'
+                                      : variant.label,
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: _isDownloading ? null : _onVariantChanged,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Row(

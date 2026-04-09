@@ -14,7 +14,7 @@ import 'services/ai_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SharedPreferences.getInstance();
-  await AiService.instance.initialize();
+  AiService.initializePlugin(); // configures FlutterGemma before runApp
   runApp(const MyApp());
 }
 

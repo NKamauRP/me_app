@@ -28,25 +28,31 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   AiModelVariant _selectedVariant = AiModelVariant.gemma4;
-  late Future<bool> _modelDownloaded;
-  late Future<Map<String, dynamic>> _modelMetadata;
+  bool _isModelDownloaded = false;
+  String _modelPath = '--';
+  String _modelSize = '--';
+  bool _isLoadingModel = true;
   bool _isDownloading = false;
   double _downloadProgress = 0;
 
   @override
   void initState() {
     super.initState();
-    _modelDownloaded = AiService.instance.isModelDownloaded(_selectedVariant);
-    _modelMetadata = AiService.instance.getModelMetadata(_selectedVariant);
-    _loadActiveVariant();
+    _loadModelState();
   }
 
-  Future<void> _loadActiveVariant() async {
+  Future<void> _loadModelState() async {
     final variant = await AiService.instance.getActiveVariant();
+    final downloaded = await AiService.instance.isModelDownloaded(variant);
+    final metadata = await AiService.instance.getModelMetadata(variant);
+
+    if (!mounted) return;
     setState(() {
       _selectedVariant = variant;
-      _modelDownloaded = AiService.instance.isModelDownloaded(variant);
-      _modelMetadata = AiService.instance.getModelMetadata(variant);
+      _isModelDownloaded = downloaded;
+      _modelPath = (metadata['path'] as String?) ?? '--';
+      _modelSize = (metadata['size'] as String?) ?? '--';
+      _isLoadingModel = false;
     });
   }
 
@@ -55,9 +61,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await AiService.instance.setActiveVariant(variant);
     setState(() {
       _selectedVariant = variant;
-      _modelDownloaded = AiService.instance.isModelDownloaded(variant);
-      _modelMetadata = AiService.instance.getModelMetadata(variant);
+      _isModelDownloaded = false;
+      _modelPath = '--';
+      _modelSize = '--';
+      _isLoadingModel = true;
     });
+    await _loadModelState();
   }
 
   Future<void> _startDownload() async {
@@ -72,12 +81,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!mounted) return;
         setState(() => _downloadProgress = value);
       },
-      onComplete: () {
+      onComplete: () async {
+        if (!mounted) return;
+        final metadata = await AiService.instance.getModelMetadata(_selectedVariant);
         if (!mounted) return;
         setState(() {
           _isDownloading = false;
-          _modelDownloaded = AiService.instance.isModelDownloaded(_selectedVariant);
-          _modelMetadata = AiService.instance.getModelMetadata(_selectedVariant);
+          _isModelDownloaded = true;
+          _modelPath = (metadata['path'] as String?) ?? '--';
+          _modelSize = (metadata['size'] as String?) ?? '--';
           _downloadProgress = 1;
         });
       },
@@ -93,8 +105,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
   }
-
-
 
   Future<void> _exportMoodHistory() async {
     final entries = await DatabaseHelper.instance.getAllEntries();
@@ -112,18 +122,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? ''
           : '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
       final note = ((entry['note'] as String?) ?? '').replaceAll('"', '""');
-
       buffer.writeln('$date,$time,"$label",${entry['intensity'] ?? 0},"$note"');
     }
 
     final tempDir = await getTemporaryDirectory();
     final file = File('${tempDir.path}/me_mood_history.csv');
     await file.writeAsString(buffer.toString());
-
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'ME mood history export',
-    );
+    await Share.shareXFiles([XFile(file.path)], text: 'ME mood history export');
   }
 
   Future<void> _deleteAllData() async {
@@ -148,9 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ) ??
         false;
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     await DatabaseHelper.instance.resetDatabase();
     await AppDatabase.instance.clearAllData();
@@ -162,20 +165,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await NotificationService.instance.cancelAllScheduled();
     if (mounted) {
       await context.read<MindMeProvider>().refresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All local data has been cleared.')),
+      );
+      setState(() {
+        _isModelDownloaded = false;
+        _downloadProgress = 0;
+        _isDownloading = false;
+      });
+      await _loadModelState();
     }
-
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('All local data has been cleared.')),
-    );
-    setState(() {
-      _loadActiveVariant();
-      _downloadProgress = 0;
-      _isDownloading = false;
-    });
   }
 
   @override
@@ -192,60 +191,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  palette.backgroundTop,
-                  palette.backgroundBottom,
-                ],
+                colors: [palette.backgroundTop, palette.backgroundBottom],
               ),
             ),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
               children: [
-                FutureBuilder<bool>(
-                  future: _modelDownloaded,
-                  builder: (context, snapshot) {
-                    final isDownloaded = snapshot.data ?? false;
-                    if (isDownloaded || _isDownloading) return const SizedBox.shrink();
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 20),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: palette.accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: palette.accent.withValues(alpha: 0.2)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.auto_awesome_rounded, color: palette.accent, size: 20),
-                              const SizedBox(width: 10),
-                              Text(
-                                'Complete Your Setup',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                  color: palette.accent,
-                                ),
+                // ── Setup Banner ──────────────────────────────────────────
+                if (!_isModelDownloaded && !_isDownloading && !_isLoadingModel)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: palette.accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: palette.accent.withValues(alpha: 0.25)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.auto_awesome_rounded, color: palette.accent, size: 20),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Complete Your Setup',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: palette.accent,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'To enable AI Companion and Insights, you\'ll need to install the on-device intelligence model.',
-                            style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
-                          ),
-                          const SizedBox(height: 12),
-                          FilledButton.tonal(
-                            onPressed: _startDownload,
-                            child: const Text('Start Download'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Install the on-device AI model to enable the Companion and Insights features.',
+                          style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.tonal(
+                          onPressed: _startDownload,
+                          child: const Text('Start Download'),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // ── AI Intelligence ───────────────────────────────────────
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,29 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Expanded(
                             child: Text('AI Intelligence', style: theme.textTheme.titleLarge),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.auto_awesome_rounded, size: 14, color: Colors.green),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'ACTIVE',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          _StatusBadge(label: 'ACTIVE', color: Colors.green),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -297,20 +267,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             children: [
                               RadioListTile<InsightMode>(
                                 contentPadding: EdgeInsets.zero,
-                                title: const Text('Instant - after each log'),
+                                title: const Text('Instant — after each log'),
                                 value: InsightMode.instant,
+                                // ignore: deprecated_member_use
                                 groupValue: settings.insightMode,
-                                onChanged: (value) async {
-                                  if (value != null) await settings.setInsightMode(value);
+                                // ignore: deprecated_member_use
+                                onChanged: (v) async {
+                                  if (v != null) await settings.setInsightMode(v);
                                 },
                               ),
                               RadioListTile<InsightMode>(
                                 contentPadding: EdgeInsets.zero,
-                                title: const Text('Daily summary - at 21:00'),
+                                title: const Text('Daily summary — at 21:00'),
                                 value: InsightMode.daily,
+                                // ignore: deprecated_member_use
                                 groupValue: settings.insightMode,
-                                onChanged: (value) async {
-                                  if (value != null) await settings.setInsightMode(value);
+                                // ignore: deprecated_member_use
+                                onChanged: (v) async {
+                                  if (v != null) await settings.setInsightMode(v);
                                 },
                               ),
                             ],
@@ -321,6 +295,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
+
+                // ── Model Selection ───────────────────────────────────────
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -328,53 +304,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: Text('System & Connectivity', style: theme.textTheme.titleLarge),
+                            child: Text('On-Device AI Model', style: theme.textTheme.titleLarge),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.link_rounded, size: 14, color: Colors.blue),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'LOCAL',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          _StatusBadge(label: 'LOCAL', color: Colors.blue),
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // Privacy Guaranteed Banner
+                      // Privacy banner
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.green.withValues(alpha: 0.1)),
+                          color: Colors.green.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.green.withValues(alpha: 0.12)),
                         ),
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
                                 color: Colors.green.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.shield_rounded, color: Colors.green, size: 20),
+                              child: const Icon(Icons.shield_rounded, color: Colors.green, size: 18),
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,10 +337,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     'Privacy Verified',
                                     style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                                   ),
-                                  const SizedBox(height: 2),
                                   Text(
-                                    'ME utilizes edge-intelligence. Your data never leaves your device.',
-                                    style: theme.textTheme.bodySmall?.copyWith(height: 1.3),
+                                    'Your data never leaves this device.',
+                                    style: theme.textTheme.bodySmall,
                                   ),
                                 ],
                               ),
@@ -395,10 +348,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      // Model dropdown
                       DropdownButtonFormField<AiModelVariant>(
-                        initialValue: _selectedVariant,
+                        value: _selectedVariant,
                         decoration: InputDecoration(
-                          labelText: 'On-Device Model (SLM)',
+                          labelText: 'Select Model',
                           labelStyle: TextStyle(color: palette.seed),
                           filled: true,
                           fillColor: palette.seed.withValues(alpha: 0.05),
@@ -408,27 +362,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         items: AiModelVariant.values.map((variant) {
-                          final isRecommended = variant == AiModelVariant.gemma4;
                           return DropdownMenuItem(
                             value: variant,
                             child: Text(
-                              '${variant.label}${isRecommended ? " (Recommended)" : ""}',
+                              variant == AiModelVariant.gemma4
+                                  ? '${variant.label} (Recommended)'
+                                  : variant.label,
                               style: theme.textTheme.bodyMedium,
                             ),
                           );
                         }).toList(),
                         onChanged: _isDownloading ? null : _onVariantChanged,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(Icons.info_outline_rounded, size: 14, color: palette.seed.withValues(alpha: 0.6)),
+                          Icon(Icons.info_outline_rounded,
+                              size: 13, color: palette.seed.withValues(alpha: 0.55)),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'At least 4GB RAM is recommended to prevent app crashes.',
+                              '4 GB RAM recommended to prevent crashes.',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: palette.seed.withValues(alpha: 0.6),
+                                color: palette.seed.withValues(alpha: 0.55),
                                 fontStyle: FontStyle.italic,
                               ),
                             ),
@@ -436,118 +392,110 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      FutureBuilder<List<dynamic>>(
-                        future: Future.wait([_modelDownloaded, _modelMetadata]),
-                        builder: (context, snapshot) {
-                          final downloaded = snapshot.data?[0] as bool? ?? false;
-                          final metadata = snapshot.data?[1] as Map<String, dynamic>? ?? {};
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: palette.seed.withValues(alpha: 0.05),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: palette.seed.withValues(alpha: 0.1)),
-                                ),
-                                child: Column(
-                                  children: [
+                      // Model status card
+                      _isLoadingModel
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: palette.seed.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: palette.seed.withValues(alpha: 0.1)),
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _isModelDownloaded
+                                            ? Icons.check_circle_rounded
+                                            : Icons.cloud_download_rounded,
+                                        color: _isModelDownloaded ? Colors.green : palette.seed,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _selectedVariant.label,
+                                              style: theme.textTheme.titleMedium,
+                                            ),
+                                            Text(
+                                              _isModelDownloaded
+                                                  ? 'Offline model active'
+                                                  : 'Download required (~${_selectedVariant.estimate})',
+                                              style: theme.textTheme.bodySmall,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (!_isModelDownloaded && !_isDownloading)
+                                        FilledButton.tonal(
+                                          onPressed: _startDownload,
+                                          child: const Text('Install'),
+                                        ),
+                                    ],
+                                  ),
+                                  if (_isModelDownloaded) ...[
+                                    const Divider(height: 24),
+                                    _ModelDetailRow(label: 'Storage Path', value: _modelPath),
+                                    const SizedBox(height: 10),
+                                    _ModelDetailRow(label: 'Model Size', value: _modelSize),
+                                  ],
+                                  if (_isDownloading) ...[
+                                    const SizedBox(height: 20),
                                     Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Icon(
-                                          downloaded ? Icons.check_circle_rounded : Icons.cloud_download_rounded,
-                                          color: downloaded ? Colors.green : palette.seed,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(_selectedVariant.label, style: theme.textTheme.titleMedium),
-                                              Text(
-                                                downloaded ? 'Offline model active' : 'Download required (~${_selectedVariant.estimate})',
-                                                style: theme.textTheme.bodySmall,
-                                              ),
-                                            ],
+                                        Text(
+                                          'INSTALLING ${_selectedVariant.name.toUpperCase()}',
+                                          style: theme.textTheme.labelSmall?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 1,
                                           ),
                                         ),
-                                        if (!downloaded && !_isDownloading)
-                                          FilledButton.tonal(
-                                            onPressed: _startDownload,
-                                            child: const Text('Install'),
+                                        Text(
+                                          '${(_downloadProgress * 100).round()}%',
+                                          style: theme.textTheme.titleSmall?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                            color: palette.seed,
                                           ),
+                                        ),
                                       ],
                                     ),
-                                    if (downloaded) ...[
-                                      const Divider(height: 24),
-                                      _ModelDetailRow(label: 'Storage Path', value: metadata['path'] ?? '--'),
-                                      const SizedBox(height: 12),
-                                      _ModelDetailRow(label: 'Model Size', value: metadata['size'] ?? '--'),
-                                    ],
-                                    if (_isDownloading) ...[
-                                      const SizedBox(height: 20),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            'INSTALLING ${_selectedVariant.name.toUpperCase()}',
-                                            style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 1),
-                                          ),
-                                          Text(
-                                            '${(_downloadProgress * 100).round()}%',
-                                            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900, color: palette.seed),
-                                          ),
-                                        ],
+                                    const SizedBox(height: 8),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(5),
+                                      child: LinearProgressIndicator(
+                                        value: _downloadProgress,
+                                        minHeight: 10,
                                       ),
-                                      const SizedBox(height: 8),
-                                      Stack(
-                                        children: [
-                                          Container(
-                                            height: 10,
-                                            width: double.infinity,
-                                            decoration: BoxDecoration(color: palette.seed.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(5)),
-                                          ),
-                                          AnimatedContainer(
-                                            duration: const Duration(milliseconds: 300),
-                                            height: 10,
-                                            width: (MediaQuery.of(context).size.width - 100) * _downloadProgress,
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(colors: [palette.seed, palette.accent]),
-                                              borderRadius: BorderRadius.circular(5),
-                                            ),
-                                          ),
-                                        ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Downloading to local storage...',
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: palette.textMuted,
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.timer_outlined, size: 14, color: Colors.grey),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              'Downloading to local storage...',
-                                              style: theme.textTheme.bodySmall?.copyWith(color: palette.textMuted, fontWeight: FontWeight.w600),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                    ),
                                   ],
-                                ),
+                                ],
                               ),
-                            ],
-                          );
-                        },
-                      ),
+                            ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 18),
+
+                // ── Notifications ─────────────────────────────────────────
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -567,15 +515,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (!granted && mounted) {
                               messenger.showSnackBar(
                                 const SnackBar(
-                                  content: Text(
-                                    'Notification permission is needed to enable reminders.',
-                                  ),
+                                  content: Text('Notification permission is needed to enable reminders.'),
                                 ),
                               );
                               return;
                             }
                           }
-
                           await settings.setDailyReminderEnabled(value);
                           await NotificationService.instance.syncWithPreferences();
                         },
@@ -584,14 +529,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
+
+                // ── Sensory Feedback ──────────────────────────────────────
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Sensory feedback',
-                        style: theme.textTheme.titleLarge,
-                      ),
+                      Text('Sensory Feedback', style: theme.textTheme.titleLarge),
                       const SizedBox(height: 12),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -599,9 +543,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         value: settings.soundEnabled,
                         onChanged: (value) async {
                           await settings.setSoundEnabled(value);
-                          if (value) {
-                            await SoundService.instance.playTap();
-                          }
+                          if (value) await SoundService.instance.playTap();
                         },
                       ),
                       SwitchListTile(
@@ -610,9 +552,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         value: settings.hapticsEnabled,
                         onChanged: (value) async {
                           await settings.setHapticsEnabled(value);
-                          if (value) {
-                            await HapticsService.instance.lightImpact();
-                          }
+                          if (value) await HapticsService.instance.lightImpact();
                         },
                       ),
                       SwitchListTile(
@@ -628,6 +568,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
+
+                // ── Data ──────────────────────────────────────────────────
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -644,20 +586,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         contentPadding: EdgeInsets.zero,
                         title: Text(
                           'Delete all data',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: Colors.redAccent,
-                          ),
+                          style: theme.textTheme.titleMedium?.copyWith(color: Colors.redAccent),
                         ),
-                        trailing: const Icon(
-                          Icons.delete_forever_rounded,
-                          color: Colors.redAccent,
-                        ),
+                        trailing: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
                         onTap: _deleteAllData,
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 18),
+
+                // ── Theme ─────────────────────────────────────────────────
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -698,14 +637,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+// ── Supporting widgets ─────────────────────────────────────────────────────
 
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.label, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, size: 8, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _ModelDetailRow extends StatelessWidget {
-  const _ModelDetailRow({
-    required this.label,
-    required this.value,
-  });
-
+  const _ModelDetailRow({required this.label, required this.value});
   final String label;
   final String value;
 
@@ -729,7 +697,6 @@ class _ModelDetailRow extends StatelessWidget {
           style: theme.textTheme.bodySmall?.copyWith(
             fontFamily: 'monospace',
             fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

@@ -32,11 +32,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late Future<Map<String, dynamic>> _modelMetadata;
   bool _isDownloading = false;
   double _downloadProgress = 0;
-  DateTime? _downloadStartedAt;
 
   @override
   void initState() {
     super.initState();
+    _modelDownloaded = AiService.instance.isModelDownloaded(_selectedVariant);
+    _modelMetadata = AiService.instance.getModelMetadata(_selectedVariant);
     _loadActiveVariant();
   }
 
@@ -63,7 +64,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0;
-      _downloadStartedAt = DateTime.now();
     });
 
     await AiService.instance.downloadModel(
@@ -79,7 +79,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _modelDownloaded = AiService.instance.isModelDownloaded(_selectedVariant);
           _modelMetadata = AiService.instance.getModelMetadata(_selectedVariant);
           _downloadProgress = 1;
-          _downloadStartedAt = null;
         });
       },
       onError: (message) {
@@ -87,7 +86,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _isDownloading = false;
           _downloadProgress = 0;
-          _downloadStartedAt = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Model download failed: $message')),
@@ -96,44 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  String _formatDuration(Duration duration) {
-    if (duration.inHours > 0) {
-      final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-      return '${duration.inHours}h ${minutes}m';
-    }
-    if (duration.inMinutes > 0) {
-      final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-      return '${duration.inMinutes}m ${seconds}s';
-    }
-    return '${duration.inSeconds.clamp(0, 59)}s';
-  }
 
-  String _downloadStatusText(int? lastSpeed) {
-    final percentage = (_downloadProgress * 100).clamp(0, 100).round();
-    final startedAt = _downloadStartedAt;
-    
-    String speedText = '';
-    if (lastSpeed != null && lastSpeed > 0) {
-      speedText = lastSpeed > 1000 
-          ? ' | ${(lastSpeed / 1024).toStringAsFixed(1)} MB/s'
-          : ' | $lastSpeed KB/s';
-    }
-
-    if (startedAt == null || _downloadProgress <= 0) {
-      return '$percentage% downloaded$speedText';
-    }
-
-    final elapsed = DateTime.now().difference(startedAt);
-    if (elapsed.inSeconds < 2 || _downloadProgress >= 0.99) {
-      return '$percentage% downloaded$speedText';
-    }
-
-    final estimatedTotalSeconds = elapsed.inSeconds / _downloadProgress;
-    final remainingSeconds =
-        (estimatedTotalSeconds - elapsed.inSeconds).clamp(0, double.infinity).round();
-
-    return '$percentage% downloaded$speedText - about ${_formatDuration(Duration(seconds: remainingSeconds))} left';
-  }
 
   Future<void> _exportMoodHistory() async {
     final entries = await DatabaseHelper.instance.getAllEntries();
@@ -214,7 +175,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _loadActiveVariant();
       _downloadProgress = 0;
       _isDownloading = false;
-      _downloadStartedAt = null;
     });
   }
 
@@ -241,6 +201,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               children: [
+                FutureBuilder<bool>(
+                  future: _modelDownloaded,
+                  builder: (context, snapshot) {
+                    final isDownloaded = snapshot.data ?? false;
+                    if (isDownloaded || _isDownloading) return const SizedBox.shrink();
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 20),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: palette.accent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: palette.accent.withValues(alpha: 0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.auto_awesome_rounded, color: palette.accent, size: 20),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Complete Your Setup',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  color: palette.accent,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'To enable AI Companion and Insights, you\'ll need to install the on-device intelligence model.',
+                            style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.tonal(
+                            onPressed: _startDownload,
+                            child: const Text('Start Download'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,27 +293,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         opacity: settings.aiInsightsEnabled ? 1 : 0.45,
                         child: IgnorePointer(
                           ignoring: !settings.aiInsightsEnabled,
-                          child: RadioGroup<InsightMode>(
-                            groupValue: settings.insightMode,
-                            onChanged: (value) async {
-                              if (value != null) {
-                                await settings.setInsightMode(value);
-                              }
-                            },
-                            child: Column(
-                              children: const [
-                                RadioListTile<InsightMode>(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text('Instant - after each log'),
-                                  value: InsightMode.instant,
-                                ),
-                                RadioListTile<InsightMode>(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text('Daily summary - at 21:00'),
-                                  value: InsightMode.daily,
-                                ),
-                              ],
-                            ),
+                          child: Column(
+                            children: [
+                              RadioListTile<InsightMode>(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Instant - after each log'),
+                                value: InsightMode.instant,
+                                groupValue: settings.insightMode,
+                                onChanged: (value) async {
+                                  if (value != null) await settings.setInsightMode(value);
+                                },
+                              ),
+                              RadioListTile<InsightMode>(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Daily summary - at 21:00'),
+                                value: InsightMode.daily,
+                                groupValue: settings.insightMode,
+                                onChanged: (value) async {
+                                  if (value != null) await settings.setInsightMode(value);
+                                },
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -391,7 +396,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<AiModelVariant>(
-                        value: _selectedVariant,
+                        initialValue: _selectedVariant,
                         decoration: InputDecoration(
                           labelText: 'On-Device Model (SLM)',
                           labelStyle: TextStyle(color: palette.seed),
@@ -403,9 +408,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         items: AiModelVariant.values.map((variant) {
+                          final isRecommended = variant == AiModelVariant.gemma4;
                           return DropdownMenuItem(
                             value: variant,
-                            child: Text(variant.label, style: theme.textTheme.bodyMedium),
+                            child: Text(
+                              '${variant.label}${isRecommended ? " (Recommended)" : ""}',
+                              style: theme.textTheme.bodyMedium,
+                            ),
                           );
                         }).toList(),
                         onChanged: _isDownloading ? null : _onVariantChanged,
@@ -689,38 +698,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-class _MetricTile extends StatelessWidget {
-  const _MetricTile({
-    required this.label,
-    required this.value,
-  });
 
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-      ],
-    );
-  }
-}
 
 class _ModelDetailRow extends StatelessWidget {
   const _ModelDetailRow({

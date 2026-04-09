@@ -107,10 +107,10 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
               final crossAxisCount = screenWidth < 400 ? 3 : 4;
               final crossAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
               final mainAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
-              final childAspectRatio = screenWidth < 400 ? 0.85 : 0.95;
+              final childAspectRatio = screenWidth < 400 ? 0.76 : 0.88;
 
               return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 60),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Column(

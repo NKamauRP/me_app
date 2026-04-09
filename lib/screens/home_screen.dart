@@ -204,9 +204,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: _DashboardHeader(
                         streak: stats.streak,
                         title: levelFlavor.title,
-                        subtitle: todayMood == null
-                            ? 'Welcome back'
-                            : 'Welcome back - ${todayMood.emoji} ${todayMood.label}',
+                        subtitle: todayMood != null
+                            ? 'Welcome back - ${todayMood.emoji} ${todayMood.label}'
+                            : stats.xp == 0 
+                                ? 'Welcome to your mindful space'
+                                : 'Welcome back',
                         onOpenHistory: () {
                           Navigator.of(context).push(
                             buildAppRoute(const MoodHistoryScreen()),
@@ -224,6 +226,27 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                     ),
+                    if (stats.xp == 0 && !provider.hasLoggedToday) ...[
+                      const SizedBox(height: 18),
+                      RevealOnBuild(
+                        offset: const Offset(0, 10),
+                        child: GlassPanel(
+                          tint: palette.accent.withValues(alpha: 0.1),
+                          child: Row(
+                            children: [
+                              Icon(Icons.lightbulb_outline_rounded, color: palette.accent),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  'First record the mood you are feeling right now to start your journey.',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 18),
                     RevealOnBuild(
                       offset: const Offset(0, 10),

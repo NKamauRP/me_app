@@ -9,10 +9,12 @@ import 'core/services/theme_service.dart';
 import 'db/app_database.dart';
 import 'features/mind/providers/mind_me_provider.dart';
 import 'screens/splash_screen.dart';
+import 'services/ai_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SharedPreferences.getInstance();
+  await AiService.instance.initialize();
   runApp(const MyApp());
 }
 

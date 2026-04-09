@@ -13,20 +13,8 @@ class LocalAiPlugin {
 
   static final LocalAiPlugin instance = LocalAiPlugin._();
 
-  Future<void> init({
-    required int maxTokens,
-    required double temperature,
-    required int topK,
-    required int randomSeed,
-    String? modelPath,
-  }) {
-    return FlutterGemmaPlugin.instance.init(
-      maxTokens: maxTokens,
-      temperature: temperature,
-      topK: topK,
-      randomSeed: randomSeed,
-      modelPath: modelPath,
-    );
+  Future<void> initialize() async {
+    await FlutterGemma.initialize();
   }
 }
 
@@ -50,6 +38,10 @@ class AiService {
 
   static const _activeModelKey = 'ai_active_model_variant';
 
+  Future<void> initialize() async {
+    await LocalAiPlugin.instance.initialize();
+  }
+
   Future<AiModelVariant> getActiveVariant() async {
     final prefs = await SharedPreferences.getInstance();
     final name = prefs.getString(_activeModelKey);
@@ -62,7 +54,7 @@ class AiService {
   Future<void> setActiveVariant(AiModelVariant variant) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_activeModelKey, variant.name);
-    _isInitialised = false;
+    _chatModel = null;
   }
 
   Future<String> getModelPath(AiModelVariant variant) async {
@@ -97,9 +89,9 @@ class AiService {
     }
   }
 
-  bool _isInitialised = false;
   bool _isInitialising = false;
   bool _isDownloading = false;
+  InferenceModel? _chatModel;
 
   Future<bool> isModelDownloaded(AiModelVariant variant) async {
     final path = await getModelPath(variant);
@@ -107,7 +99,7 @@ class AiService {
   }
 
   Future<bool> _ensureInitialised() async {
-    if (_isInitialised) return true;
+    if (_chatModel != null) return true;
     if (_isInitialising) return false;
     
     final variant = await getActiveVariant();
@@ -116,14 +108,14 @@ class AiService {
     _isInitialising = true;
     try {
       final path = await getModelPath(variant);
-      await LocalAiPlugin.instance.init(
-        maxTokens: 200,
-        temperature: 0.7,
-        topK: 40,
-        randomSeed: 42,
-        modelPath: path,
-      );
-      _isInitialised = true;
+      
+      // Modern API: Install from file then get active model
+      await FlutterGemma.installModel(
+        modelType: variant == AiModelVariant.phi2 ? ModelType.phi : ModelType.gemmaIt,
+      ).fromFile(path).install();
+
+      _chatModel = await FlutterGemma.getActiveModel();
+      
       return true;
     } catch (error) {
       debugPrint('AiService initialisation failed: $error');
@@ -146,31 +138,13 @@ class AiService {
 
     _isDownloading = true;
     try {
-      final completer = Completer<void>();
-      late final StreamSubscription<int> subscription;
-      subscription = FlutterGemmaPlugin.instance
-          .loadNetworkModelWithProgress(url: variant.url)
-          .listen(
-        (progress) {
-          onProgress((progress / 100).clamp(0.0, 1.0));
-        },
-        onError: (Object error) async {
-          await subscription.cancel();
-          onError(error.toString());
-          if (!completer.isCompleted) {
-            completer.completeError(error);
-          }
-        },
-        onDone: () async {
-          await subscription.cancel();
-          onComplete();
-          if (!completer.isCompleted) {
-            completer.complete();
-          }
-        },
-        cancelOnError: true,
-      );
-      await completer.future;
+      // Modern API: use installModel().fromNetwork().withProgress().install()
+      await FlutterGemma.installModel(
+        modelType: variant == AiModelVariant.phi2 ? ModelType.phi : ModelType.gemmaIt,
+      ).fromNetwork(variant.url).withProgress(
+        (progress) => onProgress(progress / 100),
+      ).install();
+      onComplete();
     } catch (error) {
       onError(error.toString());
     } finally {
@@ -286,13 +260,62 @@ Max 12 words. Be warm.<end_of_turn>
       chatBuffer.write('<start_of_turn>$role\n${turn['content']}<end_of_turn>\n');
     }
     chatBuffer.write('<start_of_turn>model\n');
-    return await _runInference(chatBuffer.toString(), 'chat');
+    
+    try {
+      // Aggregate the stream into a single string for legacy compatibility
+      final session = await _chatModel?.createChat(
+        temperature: 0.7,
+        randomSeed: 42,
+        topK: 40,
+      );
+      
+      if (session == null) return _fallback('chat');
+      
+      // Add the user query to the context first
+      await session.addQueryChunk(Message.text(text: chatBuffer.toString(), isUser: true));
+      
+      final responseStream = session.generateChatResponseAsync();
+      
+      final buffer = StringBuffer();
+      await for (final response in responseStream) {
+        if (response is TextResponse) {
+          buffer.write(response.token);
+        }
+      }
+      
+      final result = buffer.toString();
+      return result.trim().isNotEmpty ? result.trim() : _fallback('chat');
+    } catch (error) {
+      debugPrint('AiService chat failed: $error');
+      return _fallback('chat');
+    }
   }
 
   Future<String> _runInference(String prompt, String moodId) async {
     try {
-      final result = await FlutterGemmaPlugin.instance.getResponse(prompt: prompt);
-      return result?.trim().isNotEmpty == true ? result!.trim() : _fallback(moodId);
+      // Create a ephemeral session for one-shot inference
+      final session = await _chatModel?.createChat(
+        temperature: 0.7,
+        randomSeed: 42,
+        topK: 40,
+      );
+      
+      if (session == null) return _fallback(moodId);
+      
+      // Add the prompt to the context first
+      await session.addQueryChunk(Message.text(text: prompt, isUser: true));
+      
+      final responseStream = session.generateChatResponseAsync();
+      
+      final buffer = StringBuffer();
+      await for (final response in responseStream) {
+        if (response is TextResponse) {
+          buffer.write(response.token);
+        }
+      }
+      
+      final result = buffer.toString();
+      return result.trim().isNotEmpty ? result.trim() : _fallback(moodId);
     } catch (error) {
       debugPrint('AiService inference failed: $error');
       return _fallback(moodId);
@@ -317,11 +340,9 @@ Max 12 words. Be warm.<end_of_turn>
   }
 
   Future<void> reset() async {
-    _isInitialised = false;
     _isInitialising = false;
     _isDownloading = false;
-    try {
-      await FlutterGemmaPlugin.instance.close();
-    } catch (_) {}
+    _chatModel = null;
+    // Note: Modern API handles model lifecycle internally
   }
 }

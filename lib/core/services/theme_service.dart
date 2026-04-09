@@ -17,6 +17,7 @@ class ThemeService extends ChangeNotifier {
   static const String _aiInsightsEnabledKey = 'ai_insights_enabled';
   static const String _insightModeKey = 'insight_mode';
   static const String _dailyReminderEnabledKey = 'daily_reminder_enabled';
+  static const String _isFirstLaunchKey = 'is_first_launch';
 
   SharedPreferences? _preferences;
   AppThemePreset _currentTheme = AppThemePreset.calm;
@@ -29,6 +30,7 @@ class ThemeService extends ChangeNotifier {
   bool _aiInsightsEnabled = true;
   InsightMode _insightMode = InsightMode.instant;
   bool _dailyReminderEnabled = false;
+  bool _isFirstLaunch = true;
 
   AppThemePreset get currentTheme => _currentTheme;
   bool get soundEnabled => _soundEnabled;
@@ -40,6 +42,7 @@ class ThemeService extends ChangeNotifier {
   bool get aiInsightsEnabled => _aiInsightsEnabled;
   InsightMode get insightMode => _insightMode;
   bool get dailyReminderEnabled => _dailyReminderEnabled;
+  bool get isFirstLaunch => _isFirstLaunch;
   ThemeData get themeData => AppTheme.themeFor(_currentTheme);
 
   Future<void> initialize() async {
@@ -67,6 +70,7 @@ class ThemeService extends ChangeNotifier {
     );
     _dailyReminderEnabled =
         _preferences?.getBool(_dailyReminderEnabledKey) ?? false;
+    _isFirstLaunch = _preferences?.getBool(_isFirstLaunchKey) ?? true;
 
     if (notify) {
       notifyListeners();
@@ -163,6 +167,15 @@ class ThemeService extends ChangeNotifier {
     _dailyReminderEnabled = enabled;
     notifyListeners();
     await _preferences?.setBool(_dailyReminderEnabledKey, enabled);
+  }
+
+  Future<void> completeOnboarding() async {
+    if (!_isFirstLaunch) {
+      return;
+    }
+    _isFirstLaunch = false;
+    notifyListeners();
+    await _preferences?.setBool(_isFirstLaunchKey, false);
   }
 
   AppThemePreset _themeFromName(String value) {

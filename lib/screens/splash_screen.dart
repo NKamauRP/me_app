@@ -8,6 +8,7 @@ import '../core/app_theme.dart';
 import '../core/services/theme_service.dart';
 import '../features/mind/providers/mind_me_provider.dart';
 import 'home_screen.dart';
+import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,9 +34,16 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    Navigator.of(context).pushReplacement(
-      buildAppRoute(const HomeScreen()),
-    );
+    final themeService = context.read<ThemeService>();
+    if (themeService.isFirstLaunch) {
+      Navigator.of(context).pushReplacement(
+        buildAppRoute(const OnboardingScreen()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        buildAppRoute(const HomeScreen()),
+      );
+    }
   }
 
   @override

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
+import 'package:flutter_gemma/core/model_management/cancel_token.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,32 +15,30 @@ import '../data/mood_aggregator.dart';
 
 /// All on-device models the app supports.
 ///
-/// URLs point to HuggingFace `litert-community` public repos so no
-/// authentication token is required by default.
+/// Use only PUBLIC models (no HuggingFace auth required) to avoid silent
+/// download failures. Gemma 3 1B from litert-community is gated — avoid it.
 enum AiModelVariant {
   gemma4(
     'Gemma 4 E2B',
-    'gemma_4_e2b.task',
-    // Public litert-community build — no HF token needed
-    'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-int4.task',
-    '~1.3 GB',
-    ModelType.gemmaIt,
-  ),
-  gemma3(
-    'Gemma 3 1B',
-    'gemma_3_1b.task',
-    // Gated litert-community build — HF token required
-    'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task',
-    '~600 MB',
+    'gemma-4-E2B-it.litertlm',
+    'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm',
+    '~1.4 GB',
     ModelType.gemmaIt,
   ),
   phi4(
     'Phi-4 Mini',
-    'phi4_mini.task',
-    // Public litert-community build — no HF token needed
-    'https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/phi-4-mini-instruct-int4.task',
-    '~2.3 GB',
+    'phi4_q8_ekv1280.task',
+    'https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/phi4_q8_ekv1280.task',
+    '~1.9 GB',
     ModelType.general,
+  ),
+  smolLm(
+    'SmolLM 135M',
+    'smollm_135m.task',
+    // Smallest public model — great for testing the download flow
+    'https://huggingface.co/litert-community/SmolLM-135M-Instruct/resolve/main/SmolLM-135M-Instruct_multi-prefill-seq_q8_ekv1280.task',
+    '~166 MB',
+    ModelType.gemmaIt,
   );
 
   final String label;
@@ -69,14 +68,23 @@ class AiService {
 
   InferenceModel? _chatModel;
   bool _isInitialising = false;
-  bool _isDownloading = false;
+  CancelToken? _cancelToken;
+  bool _modelRegistered = false; // prevents re-registering on every inference
+
+  final ValueNotifier<bool> isDownloading = ValueNotifier<bool>(false);
+  // Progress stored as 0.0–1.0 for use in LinearProgressIndicator
+  final ValueNotifier<double> downloadProgress = ValueNotifier<double>(0.0);
+  final ValueNotifier<String?> downloadError = ValueNotifier<String?>(null);
 
   // ── lifecycle ──────────────────────────────────────────────────────────────
 
   /// Call once in main() before runApp().
+  ///
+  /// flutter_gemma v0.13+ automatically handles Android Foreground Service
+  /// for downloads >500 MB — no separate background_service plugin needed.
   static void initializePlugin() {
     FlutterGemma.initialize(
-      maxDownloadRetries: 5,
+      maxDownloadRetries: 10,
     );
   }
 
@@ -132,32 +140,190 @@ class AiService {
 
   // ── download ──────────────────────────────────────────────────────────────
 
+  /// Downloads [variant] from the network.
+  ///
+  /// flutter_gemma's [fromNetwork] with [foreground: true] automatically
+  /// starts an Android foreground service that survives the user leaving the
+  /// Settings screen or minimising the app. No extra plugin is needed.
+  ///
+  /// Progress from the plugin is already in the range 0–100 (int). We
+  /// normalise it to 0.0–1.0 for [downloadProgress] which drives the UI.
   Future<void> downloadModel({
     required AiModelVariant variant,
-    required void Function(double progress) onProgress,
-    required void Function() onComplete,
-    required void Function(String message) onError,
+    void Function(double progress)? onProgress,
+    void Function()? onComplete,
+    void Function(String message)? onError,
   }) async {
-    if (_isDownloading) {
-      onError('A model download is already in progress.');
+    if (isDownloading.value) {
+      onError?.call('A download is already in progress.');
       return;
     }
-    _isDownloading = true;
+
+    isDownloading.value = true;
+    downloadProgress.value = 0.0;
+    downloadError.value = null;
+    _cancelToken = CancelToken();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_downloading_ai_model', true);
+    await prefs.setString('downloading_ai_model_name', variant.name);
+
     try {
       await FlutterGemma.installModel(
         modelType: variant.modelType,
-      ).fromNetwork(
-        variant.url,
-        // foreground: null → auto-detect (>500 MB uses foreground service)
-      ).withProgress(
-        (progress) => onProgress(progress / 100.0),
-      ).install();
-      _chatModel = null; // ensure fresh init after download
-      onComplete();
-    } catch (error) {
-      onError(error.toString());
+      )
+          .fromNetwork(
+            variant.url,
+            // DO NOT pass foreground: true — not a valid parameter,
+            // foreground service is automatic for files > 500MB
+          )
+          .withCancelToken(_cancelToken!)
+          .withProgress((progress) {
+            // progress is DownloadProgress object with .percentage (int 0-100)
+            // If the plugin passes a raw int, handle both cases safely:
+            double p;
+            if (progress is int) {
+              p = progress / 100.0;
+            } else {
+              try {
+                // DownloadProgress object
+                p = ((progress as dynamic).percentage as int) / 100.0;
+              } catch (_) {
+                p = downloadProgress.value; // keep last known value
+              }
+            }
+            p = p.clamp(0.0, 1.0);
+            downloadProgress.value = p;
+            onProgress?.call(p);
+          })
+          .install();
+
+      // Only clean up old model AFTER successful download
+      final oldVariant = await getActiveVariant();
+      if (oldVariant != variant) {
+        final oldPath = await getModelPath(oldVariant);
+        final oldFile = File(oldPath);
+        if (await oldFile.exists()) {
+          try { await oldFile.delete(); } catch (_) {}
+        }
+      }
+
+      _chatModel = null;
+      _modelRegistered = false;
+      downloadProgress.value = 1.0;
+      await setActiveVariant(variant);
+      await prefs.setBool('is_downloading_ai_model', false);
+      _cancelToken = null;
+      onComplete?.call();
+
+    } on Object catch (error) {
+      final isCancelled = _cancelToken != null &&
+          CancelToken.isCancel(error);
+
+      if (!isCancelled) {
+        // Delete partial/corrupt file on failure
+        try {
+          final path = await getModelPath(variant);
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+
+        final msg = error.toString();
+        downloadError.value = msg;
+        await prefs.setBool('is_downloading_ai_model', false);
+        onError?.call(msg);
+      } else {
+        // Cancelled intentionally — clean up quietly
+        try {
+          final path = await getModelPath(variant);
+          final file = File(path);
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+        await prefs.setBool('is_downloading_ai_model', false);
+        downloadError.value = null;
+      }
     } finally {
-      _isDownloading = false;
+      isDownloading.value = false;
+      _cancelToken = null;
+    }
+  }
+
+  /// Call this to let the user cancel a stalled or unwanted download.
+  void cancelDownload() {
+    _cancelToken?.cancel('User cancelled download');
+  }
+
+  /// Called on app startup. Clears stale download flags.
+  /// Does NOT re-trigger a download — flutter_gemma's foreground
+  /// service survives app restart on its own. Re-triggering causes
+  /// a double-download race condition.
+  Future<void> resumeActiveDownload() async {
+    final prefs = await SharedPreferences.getInstance();
+    final wasDownloading = prefs.getBool('is_downloading_ai_model') ?? false;
+    if (!wasDownloading) return;
+
+    final modelName = prefs.getString('downloading_ai_model_name');
+    if (modelName == null) {
+      await prefs.setBool('is_downloading_ai_model', false);
+      return;
+    }
+
+    final variant = AiModelVariant.values.firstWhere(
+      (v) => v.name == modelName,
+      orElse: () => AiModelVariant.smolLm,
+    );
+
+    // If file is already fully present, clear the flag and move on
+    if (await isModelDownloaded(variant)) {
+      final meta = await getModelMetadata(variant);
+      final sizeStr = meta['size'] as String? ?? '--';
+      final sizeGB = double.tryParse(
+              sizeStr.replaceAll(' GB', '').trim()) ??
+          0.0;
+      if (sizeGB > 0.05) {
+        // File looks complete (> 50 MB present)
+        await prefs.setBool('is_downloading_ai_model', false);
+        await setActiveVariant(variant);
+        return;
+      }
+    }
+
+    // Partial/missing file — delete the fragment and clear flag.
+    // The user must manually restart the download from Settings.
+    try {
+      final path = await getModelPath(variant);
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+    await prefs.setBool('is_downloading_ai_model', false);
+    downloadError.value =
+        'Previous download was incomplete. Please download again.';
+  }
+
+  // ── model management ──────────────────────────────────────────────────────
+  
+  /// Deletes the physical litert/task model file from the device to save space.
+  Future<void> deleteActiveModel({bool keepVariantConfig = false}) async {
+    try {
+      await _chatModel?.close();
+    } catch (_) {}
+    _chatModel = null;
+    _modelRegistered = false;
+
+    try {
+      final variant = await getActiveVariant();
+      final path = await getModelPath(variant);
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint('Deleted model file: $path');
+      }
+    } catch (e) {
+      debugPrint('Error deleting model: $e');
+    }
+
+    if (!keepVariantConfig) {
+      await setActiveVariant(AiModelVariant.smolLm);
     }
   }
 
@@ -166,9 +332,15 @@ class AiService {
   /// Ensures the model is loaded and returns true if ready.
   Future<bool> _ensureInitialised() async {
     if (_chatModel != null) return true;
+
+    // Prevent concurrent init calls
     if (_isInitialising) {
-      // Wait briefly for concurrent init
-      await Future.delayed(const Duration(milliseconds: 200));
+      // Wait up to 10 seconds for the concurrent init to finish
+      for (int i = 0; i < 50; i++) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (_chatModel != null) return true;
+        if (!_isInitialising) break;
+      }
       return _chatModel != null;
     }
 
@@ -177,18 +349,24 @@ class AiService {
 
     _isInitialising = true;
     try {
-      // Install from the local file so MediaPipe registers it as the active model
-      await FlutterGemma.installModel(
-        modelType: variant.modelType,
-      ).fromFile(await getModelPath(variant)).install();
+      // Register the local file with the plugin — only if not already done.
+      // Calling installModel().fromFile() repeatedly re-initialises the
+      // native engine and causes GPU delegate crashes on the second call.
+      if (!_modelRegistered) {
+        await FlutterGemma.installModel(
+          modelType: variant.modelType,
+        ).fromFile(await getModelPath(variant)).install();
+        _modelRegistered = true;
+      }
 
       _chatModel = await FlutterGemma.getActiveModel(
         maxTokens: 1024,
         preferredBackend: PreferredBackend.gpu,
       );
-      return true;
+      return _chatModel != null;
     } catch (e) {
       debugPrint('AiService._ensureInitialised: $e');
+      _modelRegistered = false; // allow retry on next call
       return false;
     } finally {
       _isInitialising = false;
@@ -323,7 +501,6 @@ class AiService {
             "Ask one follow-up question when appropriate.",
       );
 
-      // Replay history so the model has context
       for (final turn in history) {
         final isUser = turn['role'] == 'user';
         await session.addQueryChunk(
@@ -369,11 +546,16 @@ class AiService {
   // ── reset ─────────────────────────────────────────────────────────────────
 
   Future<void> reset() async {
+    cancelDownload(); // cancel any active download first
     try {
       await _chatModel?.close();
     } catch (_) {}
     _chatModel = null;
     _isInitialising = false;
-    _isDownloading = false;
+    _modelRegistered = false;
+    _cancelToken = null;
+    isDownloading.value = false;
+    downloadProgress.value = 0.0;
+    downloadError.value = null;
   }
 }

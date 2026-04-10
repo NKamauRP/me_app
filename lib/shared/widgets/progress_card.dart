@@ -68,117 +68,135 @@ class _ProgressCardState extends State<ProgressCard> {
   Widget build(BuildContext context) {
     return AnimatedScale(
       duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOutCubic,
-      scale: _showProgressGlow ? 1.01 : 1,
-      child: GlassPanel(
-        tint: widget.seedColor.withValues(alpha: 0.1),
+      curve: Curves.easeOutBack,
+      scale: _showProgressGlow ? 1.02 : 1.0,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: widget.seedColor.withValues(alpha: 0.1),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Progress',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.levelFlavor.subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: widget.accentColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Text(
-                  'Level ${widget.stats.level}',
-                  style: TextStyle(
-                    color: widget.seedColor,
-                    fontWeight: FontWeight.w800,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Insights & Progress',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontFamily: 'Lora',
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Track your consistency and growth',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text(
-            '${widget.stats.xpIntoCurrentLevel}/50 XP to next level',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 10),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 320),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: [
-                if (_showProgressGlow)
-                  BoxShadow(
-                    color: widget.accentColor.withValues(alpha: 0.28),
-                    blurRadius: 18,
-                    spreadRadius: 1,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: widget.seedColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
                   ),
+                  child: Text(
+                    'LEVEL ${widget.stats.level}',
+                    style: TextStyle(
+                      color: widget.seedColor,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 10,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
               ],
             ),
-            child: ClipRRect(
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${widget.stats.xpIntoCurrentLevel}/50 XP',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: widget.seedColor,
+                      ),
+                ),
+                Text(
+                  'Next level in ${50 - widget.stats.xpIntoCurrentLevel} XP',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
               borderRadius: BorderRadius.circular(999),
               child: TweenAnimationBuilder<double>(
                 tween: Tween<double>(
                   begin: _previousProgress,
                   end: widget.stats.progressToNextLevel,
                 ),
-                duration: const Duration(milliseconds: 700),
-                curve: Curves.easeOutCubic,
+                duration: const Duration(milliseconds: 1000),
+                curve: Curves.easeOutQuart,
                 builder: (context, value, _) {
                   return LinearProgressIndicator(
-                    minHeight: 12,
+                    minHeight: 8,
                     value: value,
-                    backgroundColor: widget.seedColor.withValues(alpha: 0.12),
-                    valueColor: AlwaysStoppedAnimation<Color>(widget.accentColor),
+                    backgroundColor: widget.seedColor.withValues(alpha: 0.05),
+                    valueColor: AlwaysStoppedAnimation<Color>(widget.seedColor),
                   );
                 },
               ),
             ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _MetricTile(
-                  label: 'Streak',
-                  value: '🔥 ${widget.stats.streak} days',
-                  accentColor: widget.seedColor,
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: _MetricTile(
+                    label: 'Current Streak',
+                    value: '🔥 ${widget.stats.streak} days',
+                    accentColor: widget.seedColor,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _MetricTile(
-                  label: 'Title',
-                  value: widget.levelFlavor.title,
-                  accentColor: widget.accentColor,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _MetricTile(
+                    label: 'Archetype',
+                    value: widget.levelFlavor.title,
+                    accentColor: widget.seedColor,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          _MiniWeeklyGraph(
-            logs: widget.weeklyLogs,
-            lineColor: widget.seedColor,
-            accentColor: widget.accentColor,
-          ),
-        ],
-      ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _MiniWeeklyGraph(
+              logs: widget.weeklyLogs,
+              lineColor: widget.seedColor,
+              accentColor: widget.seedColor,
+            ),
+          ],
+        ),
       ),
     );
   }

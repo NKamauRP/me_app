@@ -8,6 +8,7 @@ import '../features/mind/providers/mind_me_provider.dart';
 import '../models/chat_message.dart';
 import '../services/ai_service.dart';
 import '../shared/widgets/glass_panel.dart';
+import '../shared/widgets/halftone_overlay.dart';
 import '../widgets/insight_card.dart';
 
 class CompanionScreen extends StatefulWidget {
@@ -146,102 +147,152 @@ class _CompanionScreenState extends State<CompanionScreen> {
         backgroundColor: Colors.transparent,
       ),
       extendBodyBehindAppBar: true,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [palette.backgroundTop, palette.backgroundBottom],
+      body: HalftoneOverlay(
+        opacity: settings.currentTheme == AppThemePreset.night || settings.currentTheme == AppThemePreset.focus 
+            ? 0.08 
+            : 0.04,
+        child: Container(
+          decoration: BoxDecoration(
+            color: palette.scaffold,
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  itemCount: _messages.length + (_isThinking ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == _messages.length) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
+          child: SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    itemCount: _messages.length + (_isThinking ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == _messages.length) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: TypingDots(),
+                          ),
+                        );
+                      }
+
+                      final message = _messages[index];
+                      final isUser = message.role == MessageRole.user;
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: TypingDots(),
+                          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.of(context).size.width * 0.85,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                  decoration: BoxDecoration(
+                                    color: isUser ? palette.seed : theme.colorScheme.surface,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: const Radius.circular(20),
+                                      topRight: const Radius.circular(20),
+                                      bottomLeft: Radius.circular(isUser ? 20 : 4),
+                                      bottomRight: Radius.circular(isUser ? 4 : 20),
+                                    ),
+                                    border: isUser ? null : Border.all(color: palette.textPrimary.withValues(alpha: 0.05)),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.03),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    message.content,
+                                    style: isUser 
+                                        ? theme.textTheme.bodyLarge?.copyWith(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                          )
+                                        : theme.textTheme.bodyLarge?.copyWith(
+                                            fontFamily: 'Lora',
+                                            fontSize: 16,
+                                            height: 1.6,
+                                          ),
+                                  ),
+                                ),
+                                if (!isUser) ...[
+                                  const SizedBox(height: 6),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: Text(
+                                      'ME · On-device reasoning',
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        fontSize: 10,
+                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
                       );
-                    }
-
-                    final message = _messages[index];
-                    final isUser = message.role == MessageRole.user;
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Align(
-                        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * 0.75,
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surface,
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(color: palette.textPrimary.withValues(alpha: 0.1)),
                           ),
-                          child: GlassPanel(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            borderRadius: 18,
-                            tint: isUser ? palette.seed : Colors.white10,
-                            child: Text(
-                              message.content,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: isUser ? Colors.white : theme.textTheme.bodyLarge?.color,
-                              ),
+                          child: TextField(
+                            controller: _controller,
+                            onSubmitted: (_) => _sendMessage(),
+                            style: theme.textTheme.bodyLarge,
+                            decoration: const InputDecoration(
+                              hintText: 'Share what\'s on your mind...',
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              filled: false,
                             ),
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: GlassPanel(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        borderRadius: 24,
-                        child: TextField(
-                          controller: _controller,
-                          onSubmitted: (_) => _sendMessage(),
-                          decoration: const InputDecoration(
-                            hintText: 'Share what\'s on your mind...',
-                            border: InputBorder.none,
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _sendMessage,
+                        child: Container(
+                          height: 52,
+                          width: 52,
+                          decoration: BoxDecoration(
+                            color: palette.seed,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.arrow_upward_rounded,
+                            color: Colors.white,
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: _sendMessage,
-                      child: Container(
-                        height: 52,
-                        width: 52,
-                        decoration: BoxDecoration(
-                          color: palette.seed,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.send_rounded,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 }
+

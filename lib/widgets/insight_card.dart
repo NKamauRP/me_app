@@ -33,75 +33,90 @@ class InsightCard extends StatelessWidget {
         : 'Every log is a quiet step toward knowing yourself a little better.';
 
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
-      transitionBuilder: (child, animation) {
-        return FadeTransition(
-          opacity: animation,
-          child: SizeTransition(
-            sizeFactor: animation,
-            axisAlignment: -1,
-            child: child,
-          ),
-        );
-      },
+      duration: const Duration(milliseconds: 300),
       child: Container(
         key: ValueKey<String>('${state.name}-$effectiveText'),
         decoration: BoxDecoration(
-          color: moodColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(20),
-          border: Border(
-            left: BorderSide(color: moodColor, width: 3),
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: moodColor.withValues(alpha: 0.15),
           ),
+          boxShadow: [
+            BoxShadow(
+              color: moodColor.withValues(alpha: 0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: moodColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                   child: Text(
-                    'AI insight',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontWeight: FontWeight.w700,
+                    'AI INSIGHT',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: moodColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onDismiss,
-                  icon: const Icon(Icons.close_rounded),
+                const Spacer(),
+                GestureDetector(
+                  onTap: onDismiss,
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: switch (state) {
                 InsightState.loading => const TypingDots(),
-                InsightState.done || InsightState.error => Text(
+                _ => Text(
                     effectiveText,
                     key: ValueKey<String>(effectiveText),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      height: 1.5,
-                      fontSize: 14,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      // Using the Serif font from the theme
+                      fontFamily: 'Lora',
+                      fontStyle: FontStyle.italic,
+                      fontSize: 16,
+                      height: 1.6,
                     ),
                   ),
-                InsightState.idle => const SizedBox.shrink(),
               },
             ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Text(
-                'on device · private',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontSize: 10,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Icon(
+                  Icons.verified_user_outlined,
+                  size: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                 ),
-              ),
+                const SizedBox(width: 6),
+                Text(
+                  'On-device reasoning · Private',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

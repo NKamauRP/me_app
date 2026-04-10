@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../models/mood_log.dart';
+
 class EntryTimeline extends StatelessWidget {
   const EntryTimeline({
     super.key,
@@ -8,7 +10,7 @@ class EntryTimeline extends StatelessWidget {
     required this.moodMap,
   });
 
-  final List<Map<String, dynamic>> entries;
+  final List<MoodLog> entries;
   final Map<String, Map<String, dynamic>> moodMap;
 
   @override
@@ -35,15 +37,10 @@ class EntryTimeline extends StatelessWidget {
         separatorBuilder: (_, index) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final entry = entries[index];
-          final mood = moodMap[entry['mood_id']] ?? moodMap['happy']!;
+          final mood = moodMap[entry.mood] ?? moodMap['happy']!;
           final color = mood['color'] as Color;
-          final label = (entry['custom_label'] as String?)?.trim().isNotEmpty == true
-              ? entry['custom_label'] as String
-              : mood['label'] as String;
-          final time = DateFormat.Hm().format(
-            DateTime.tryParse(entry['timestamp'] as String? ?? '') ??
-                DateTime.now(),
-          );
+          final label = mood['label'] as String;
+          final time = 'Daily Log';
 
           return ActionChip(
             backgroundColor: color.withValues(alpha: 0.15),
@@ -63,9 +60,9 @@ class EntryTimeline extends StatelessWidget {
               moodLabel: label,
               moodEmoji: mood['emoji'] as String,
               color: color,
-              intensity: (entry['intensity'] as int?) ?? 0,
-              note: entry['note'] as String?,
-              timestamp: entry['timestamp'] as String?,
+              intensity: entry.intensity,
+              note: entry.note,
+              timestamp: entry.date,
             ),
           );
         },
@@ -122,8 +119,8 @@ class EntryTimeline extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               _DetailLine(
-                label: 'Time',
-                value: DateFormat('EEE, d MMM • HH:mm').format(parsedTime),
+                label: 'Date',
+                value: DateFormat('EEE, d MMM').format(parsedTime),
                 color: color,
               ),
               if (note != null && note.trim().isNotEmpty) ...[

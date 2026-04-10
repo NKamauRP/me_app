@@ -9,6 +9,7 @@ import '../mood_catalog.dart';
 import '../mood_slider.dart';
 import '../widgets/mood_option_card.dart';
 import 'mind_question_screen.dart';
+import '../../../shared/widgets/halftone_overlay.dart';
 
 class MoodSelectionScreen extends StatefulWidget {
   const MoodSelectionScreen({super.key});
@@ -88,138 +89,137 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
       appBar: AppBar(
         title: const Text('Mind Me'),
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              palette.backgroundTop,
-              palette.backgroundBottom,
-            ],
+      body: HalftoneOverlay(
+        opacity: 0.04,
+        child: Container(
+          decoration: BoxDecoration(
+            color: palette.scaffold,
           ),
-        ),
-        child: SafeArea(
-          top: false,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final screenWidth = constraints.maxWidth;
-              final crossAxisCount = screenWidth < 400 ? 3 : 4;
-              final crossAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
-              final mainAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
-              final childAspectRatio = screenWidth < 400 ? 0.76 : 0.88;
+          child: SafeArea(
+            top: false,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final screenWidth = constraints.maxWidth;
+                final crossAxisCount = screenWidth < 400 ? 3 : 4;
+                final crossAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
+                final mainAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
+                final childAspectRatio = screenWidth < 400 ? 0.76 : 0.88;
 
-              return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 60),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'How are you feeling today?',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Choose one mood, set the intensity, and we will guide the reflection.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                              color: palette.textMuted,
-                            ),
-                      ),
-                      const SizedBox(height: 28),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _gridMoods.length,
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: crossAxisCount,
-                          crossAxisSpacing: crossAxisSpacing,
-                          mainAxisSpacing: mainAxisSpacing,
-                          childAspectRatio: childAspectRatio,
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 60),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'How are you feeling today?',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontFamily: 'Lora',
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        itemBuilder: (context, index) {
-                          final mood = _gridMoods[index];
-                          return MoodOptionCard(
-                            mood: mood,
-                            isSelected: _selectedMood?.id == mood.id,
-                            onTap: () => _toggleMood(mood),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      MoodOptionCard(
-                        mood: _customMood,
-                        isSelected: _selectedMood?.id == _customMood.id,
-                        isWide: true,
-                        onTap: () => _toggleMood(_customMood),
-                      ),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        switchInCurve: Curves.easeOutCubic,
-                        child: _selectedMood?.isCustom != true
-                            ? const SizedBox.shrink()
-                            : Padding(
-                                key: const ValueKey('custom-mood-input'),
-                                padding: const EdgeInsets.only(top: 12),
-                                child: TextField(
-                                  controller: _customMoodController,
-                                  textInputAction: TextInputAction.done,
-                                  decoration: InputDecoration(
-                                    hintText: 'Describe your mood...',
-                                    prefixIcon: Icon(
-                                      Icons.edit_outlined,
-                                      color: _customMood.color,
-                                    ),
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Choose one mood, set the intensity, and we will guide the reflection.',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                                color: palette.textMuted,
                               ),
-                      ),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 280),
-                        switchInCurve: Curves.easeOutCubic,
-                        child: selectedMood == null
-                            ? const SizedBox(height: 24)
-                            : Padding(
-                                key: ValueKey<String>(
-                                  '${selectedMood.id}-${selectedMood.label}',
-                                ),
-                                padding: const EdgeInsets.only(top: 28),
-                                child: MoodIntensitySlider(
-                                  value: _intensity,
-                                  color: selectedMood.color,
-                                  onChanged: (value) {
-                                    setState(() => _intensity = value);
-                                  },
-                                ),
-                              ),
-                      ),
-                      const SizedBox(height: 28),
-                      AnimatedActionButton(
-                        label: 'Continue',
-                        backgroundColor: selectedMood?.color,
-                        glowColor: selectedMood?.color,
-                        onPressed: !_canContinue || selectedMood == null
-                            ? null
-                            : () {
-                                Navigator.of(context).push(
-                                  buildAppRoute(
-                                    MindQuestionScreen(
-                                      mood: selectedMood,
-                                      intensity: _intensity,
+                        ),
+                        const SizedBox(height: 28),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _gridMoods.length,
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            crossAxisSpacing: crossAxisSpacing,
+                            mainAxisSpacing: mainAxisSpacing,
+                            childAspectRatio: childAspectRatio,
+                          ),
+                          itemBuilder: (context, index) {
+                            final mood = _gridMoods[index];
+                            return MoodOptionCard(
+                              mood: mood,
+                              isSelected: _selectedMood?.id == mood.id,
+                              onTap: () => _toggleMood(mood),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        MoodOptionCard(
+                          mood: _customMood,
+                          isSelected: _selectedMood?.id == _customMood.id,
+                          isWide: true,
+                          onTap: () => _toggleMood(_customMood),
+                        ),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          switchInCurve: Curves.easeOutCubic,
+                          child: _selectedMood?.isCustom != true
+                              ? const SizedBox.shrink()
+                              : Padding(
+                                  key: const ValueKey('custom-mood-input'),
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: TextField(
+                                    controller: _customMoodController,
+                                    textInputAction: TextInputAction.done,
+                                    decoration: InputDecoration(
+                                      hintText: 'Describe your mood...',
+                                      prefixIcon: Icon(
+                                        Icons.edit_outlined,
+                                        color: _customMood.color,
+                                      ),
                                     ),
+                                    onChanged: (_) => setState(() {}),
                                   ),
-                                );
-                              },
-                      ),
-                    ],
+                                ),
+                        ),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          switchInCurve: Curves.easeOutCubic,
+                          child: selectedMood == null
+                              ? const SizedBox(height: 24)
+                              : Padding(
+                                  key: ValueKey<String>(
+                                    '${selectedMood.id}-${selectedMood.label}',
+                                  ),
+                                  padding: const EdgeInsets.only(top: 28),
+                                  child: MoodIntensitySlider(
+                                    value: _intensity,
+                                    color: selectedMood.color,
+                                    onChanged: (value) {
+                                      setState(() => _intensity = value);
+                                    },
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(height: 28),
+                        AnimatedActionButton(
+                          label: 'Continue',
+                          backgroundColor: selectedMood?.color,
+                          glowColor: selectedMood?.color,
+                          onPressed: !_canContinue || selectedMood == null
+                              ? null
+                              : () {
+                                  Navigator.of(context).push(
+                                    buildAppRoute(
+                                      MindQuestionScreen(
+                                        mood: selectedMood,
+                                        intensity: _intensity,
+                                      ),
+                                    ),
+                                  );
+                                },
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),

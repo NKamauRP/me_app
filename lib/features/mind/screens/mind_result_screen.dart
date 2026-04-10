@@ -2,10 +2,8 @@ import 'dart:async';
 
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../core/app_routes.dart';
 import '../../../core/app_theme.dart';
@@ -13,8 +11,7 @@ import '../../../core/date_utils.dart';
 import '../../../core/services/feedback_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/theme_service.dart';
-import '../../../data/database_helper.dart';
-import '../../../data/xp_engine.dart';
+import '../../../db/app_database.dart';
 import '../../../models/checkin_result.dart';
 import '../../../screens/home_screen.dart';
 import '../../../services/ai_service.dart';
@@ -99,39 +96,16 @@ class _MindResultScreenState extends State<MindResultScreen> {
     }
     _didProcessEntry = true;
 
-    final todayDateString = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final totalXpGained = widget.result.baseXp + widget.result.streakBonusXp;
+    if (mounted && totalXpGained > 0) {
+      XPOverlay.show(context, totalXpGained, widget.mood.color);
+    }
+
+    if (mounted && widget.result.leveledUp) {
+      await showLevelUpDialog(context, widget.result.stats.level);
+    }
+
     final prefs = await SharedPreferences.getInstance();
-    final previousXP = prefs.getInt('total_xp') ?? 0;
-
-    await DatabaseHelper.instance.insertEntry({
-      'id': const Uuid().v4(),
-      'mood_id': widget.mood.id,
-      'custom_label': widget.mood.isCustom ? widget.mood.label : null,
-      'intensity': widget.result.log.intensity,
-      'note': widget.result.log.note.trim().isEmpty ? null : widget.result.log.note,
-      'timestamp': DateTime.now().toIso8601String(),
-      'date': todayDateString,
-    });
-
-    await XPEngine.updateStreak();
-
-    final xpGained = await XPEngine.processEntry(
-      intensity: widget.result.log.intensity,
-      hasNote: widget.result.log.note.trim().isNotEmpty,
-      date: todayDateString,
-    );
-
-    if (mounted && xpGained > 0) {
-      XPOverlay.show(context, xpGained, widget.mood.color);
-    }
-
-    final newXP = prefs.getInt('total_xp') ?? previousXP;
-    final previousLevel = XPEngine.calculateLevel(previousXP);
-    final newLevel = XPEngine.calculateLevel(newXP);
-    if (mounted && newLevel > previousLevel) {
-      await showLevelUpDialog(context, newLevel);
-    }
-
     final aiEnabled = prefs.getBool('ai_insights_enabled') ?? true;
     final insightMode = prefs.getString('insight_mode') ?? InsightMode.instant.name;
     if (!aiEnabled || insightMode != InsightMode.instant.name) {
@@ -147,7 +121,7 @@ class _MindResultScreenState extends State<MindResultScreen> {
       intensity: widget.result.log.intensity,
       note: widget.result.log.note.trim().isEmpty ? null : widget.result.log.note,
     );
-    await DatabaseHelper.instance.saveInsight(todayDateString, instant: insight);
+    await AppDatabase.instance.saveInsight(widget.result.log.date, instant: insight);
 
     if (!mounted) {
       return;

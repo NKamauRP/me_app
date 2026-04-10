@@ -15,6 +15,8 @@ class NotificationService {
   static const int _dailyReminderId = 4101;
   static const String _channelId = 'mood_reminder';
   static const String _channelName = 'Mood reminder';
+  static const String _downloadChannelId = 'model_download';
+  static const String _downloadChannelName = 'Model Download';
   static const String _lastTipKey = 'last_generated_ai_tip';
 
   final FlutterLocalNotificationsPlugin _plugin =
@@ -97,6 +99,42 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
     );
+  }
+
+  Future<void> showProgressNotification({
+    required int id,
+    required String title,
+    required String body,
+    required int progress,
+    required int maxProgress,
+  }) async {
+    if (!_initialized || !Platform.isAndroid) return;
+
+    final androidDetails = AndroidNotificationDetails(
+      _downloadChannelId,
+      _downloadChannelName,
+      channelDescription: 'Progress of AI model downloads',
+      importance: Importance.low,
+      priority: Priority.low,
+      showProgress: true,
+      maxProgress: maxProgress,
+      progress: progress,
+      ongoing: true,
+      onlyAlertOnce: true,
+      autoCancel: false,
+    );
+
+    await _plugin.show(
+      id,
+      title,
+      body,
+      NotificationDetails(android: androidDetails),
+    );
+  }
+
+  Future<void> cancelNotification(int id) async {
+    if (!_initialized) return;
+    await _plugin.cancel(id);
   }
 
   Future<void> cancelAllScheduled() async {

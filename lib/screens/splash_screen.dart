@@ -7,6 +7,7 @@ import '../core/app_routes.dart';
 import '../core/app_theme.dart';
 import '../core/services/theme_service.dart';
 import '../features/mind/providers/mind_me_provider.dart';
+import '../services/ai_service.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -28,6 +29,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _bootstrap() async {
     await context.read<MindMeProvider>().initialize();
+    
+    // Check if a background download was left active and re-attach
+    unawaited(AiService.instance.resumeActiveDownload());
+
     await Future<void>.delayed(const Duration(milliseconds: 1600));
 
     if (!mounted) {

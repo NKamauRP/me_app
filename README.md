@@ -1,62 +1,75 @@
-# ME — Your Mindful Companion
+# ME — Your Mindful Companion 🌿
 
-ME is a premium, privacy-first journal and emotional health tracker powered by on-device AI. Designed with a stunning glassmorphic aesthetic, ME helps you understand your inner weather through mindful check-ins and real-time AI guidance.
+**"Your mind is a sky. We're here to help you understand the weather."**
 
----
-
-## ✨ Key Features
-
-### 🧠 On-Device AI Insights
-ME brings the power of highly optimized small language models directly to your phone. All AI processing is performed locally, ensuring your most personal thoughts never leave your device.
-*   **Instant Insights**: Receive a warm, specific observation immediately after every check-in.
-*   **Periodic Summaries**: Generate Weekly and Monthly insights that analyze your emotional trends and recurring themes.
-*   **Smart Tips**: Dynamic, AI-generated mental health tips scheduled as your daily reminder notification.
-
-### 💬 Mind Companion
-A dedicated, real-time chat interface where you can talk to **ME**, your mindful partner. The companion is supportive, non-clinical, and aware of your recent mood patterns to provide tailored encouragement.
-
-### 📊 Emotional Analytics
-*   **Mood Journaling**: Log your mood with specific intensity levels and private notes.
-*   **Intensity Trends**: Visualise your emotional state over time with elegant weekly intensity charts.
-*   **Dominant Mood Tracking**: Understand your primary emotional state for any given week.
-
-### 🎮 Gamified Growth
-*   **XP & Leveling System**: Earn experience points for consistency and honest reflection.
-*   **Milestone Badges**: Unlock achievements like "Night Owl", "Consistency Master", and "Week Warrior".
-*   **Streaks**: Build and maintain a check-in streak to foster long-term mindfulness habits.
-
-### 🎨 Premium Design
-*   **Glassmorphic UI**: A modern, transluscent interface that feels light and alive.
-*   **Dynamic Themes**: Full support for Light and Dark modes with curated color palettes tailored to your dominant mood.
-*   **Smooth Micro-interactions**: Haptic feedback and subtle animations that make logging a joy.
+ME is a premium, privacy-first emotional sanctuary and intelligent journal built for the modern soul. Designed with a striking "Indie Clarity" aesthetic, ME combines the art of mindfulness with the science of on-device AI to provide a personalized, safe space for reflection, growth, and calm.
 
 ---
 
-## 🔒 Privacy & Technology
+## ✨ The ME Experience
 
-*   **100% On-Device AI**: Powered by localized inference engines. No internet connection is required for insights or chat once the model is downloaded.
-*   **Local Storage**: Your journal entries and stats are stored securely in a local Sqflite database.
-*   **Transparency**: Detailed "AI Model Management" allows you to see exactly how the model is performing, including download speeds and installation metrics.
+### 🧠 On-Device Intelligence
+We believe your most personal thoughts should never leave your hand. ME brings the power of highly optimized Small Language Models directly to your phone.
+*   **Instant Insights**: Like a warm cup of tea for your thoughts, receive a specific, gentle observation immediately after every check-in.
+*   **Weekly & Monthly Themes**: Identify the recurring emotional threads in your life with summaries that look at the big picture.
+*   **Mindful Notifications**: Forget generic reminders. ME generates unique, AI-powered tips tailored to your last logged mood, delivered exactly when you need them.
 
----
+### 💬 Meet Your Companion
+A dedicated, real-time chat interface where you can talk to **ME**, your mindful partner. Unlike generic bots, your Companion is:
+*   **Context-Aware**: It knows if you've had a tough morning and adjusts its tone.
+*   **Non-Clinical & Warm**: Designed to be a supportive friend, not a medical tool.
+*   **100% Private**: Every word stays encrypted on your device.
 
-## 🚀 Technical Stack
-
-*   **Framework**: [Flutter](https://flutter.dev)
-*   **AI Models**: Supported SLMs (Gemma, Phi-2)
-    *   **Data Persistence**: [Sqflite](https://pub.dev/packages/sqflite) & [Shared Preferences](https://pub.dev/packages/shared_preferences)
-    *   **Local Notifications**: [Flutter Local Notifications](https://pub.dev/packages/flutter_local_notifications)
-    *   **State Management**: [Provider](https://pub.dev/packages/provider)
-
----
-
-## 🛠 Model Management
-
-To provide powerful insights, the app utilizes highly optimized on-device models. You can manage these in the **Settings** screen, where you'll find:
-*   Real-time installation progress.
-*   Network speed and duration tracking.
-*   One-tap model reset and re-installation.
+### 🎨 Indie Clarity UI Design & Personalization
+*   **Tactile & Real**: We stepped away from generic glossy interfaces to create an authentic "Indie Clarity" look featuring halftone dot-texture overlays, bespoke typography, and soothing color palettes.
+*   **Just for You**: ME greets you by your preferred name securely stored on your device, making every interaction feel deeply personal.
+*   **Deep Analytics**: Elegant charts track your emotional volume over time, accompanied by a gamified XP & badge system.
 
 ---
 
-Developed with ❤️ for personal growth and emotional clarity.
+## 🤖 Meet the "Minds" Behind ME
+
+To provide you with high-quality reflection without compromising your privacy, ME uses state-of-the-art **Small Language Models (SLMs)**:
+
+| Model | Personality | Size | Best For |
+| :--- | :--- | :--- | :--- |
+| **SmolLM 135M** | *Quick & Direct* | ~166 MB | Extremely fast test runs and minimal battery drain. |
+| **Phi-4 Mini** | *Versatile & Wise* | ~1.9 GB | Comprehensive logic and creative encouragement. |
+| **Gemma 4 E2B** | *Deep & Insightful* | ~1.4 GB | Complex reflections and detailed monthly themes. |
+
+### How these models impact you:
+By running these models **locally**, ME ensures zero latency for your data and zero risk of your journals being used for training cloud models. 
+
+**Persistent Downloads**: Downloading a large AI model shouldn't lock you inside the app. ME handles model downloads natively through the Android Foreground Service, meaning you can lock your phone or close the app entirely, and the download will continue uninterrupted in the background. When you reopen the app, the UI seamlessly re-attaches to the ongoing task. 
+
+---
+
+## 🐛 Known Bugs & Recent Fixes
+In our journey to make ME as resilient and robust as possible, we have heavily fortified the AI management layer to solve several underlying pipeline issues:
+- **Foreground Service Collisions**: Removed errant parameters that caused the native Android download WorkManager chain to silently stall.
+- **Progress Stream Type Safety**: Rewrote the progress hook to dynamically parse `DownloadProgress` objects safely, bypassing catastrophic math exceptions that halted progress updates.
+- **GPU Delegate Crashes**: Secured the `_ensureInitialised` handshake between the UI and the MediaPipe engine. AI models are now strictly registered into local memory *only once* per boot cycle, completely resolving hardware-related app crashes on second use.
+- **Double-Download Race Conditions**: Modified the app initialization sequence to carefully inspect local disk states and running foreground services instead of blindly re-invoking network downloads on startup.
+- **Active Cancellation**: Plumbed native `CancelToken` architectures into the UI, giving you exactly what you need to safely and completely kill a 2GB download instantly without corrupting local app state.
+- **Safe Storage Overwrites**: Switching AI models now correctly and physically destroys the previous `.litertlm`/`.task` file from your device, but **only after** the new model verifies its integrity, ensuring zero wasted storage space.
+
+---
+
+## 🛠 Technical Foundation
+- **Core**: [Flutter](https://flutter.dev) for a butter-smooth cross-platform experience.
+- **AI Engine**: [MediaPipe LLM Inference](https://developers.google.com/mediapipe) via `flutter_gemma`.
+- **Background Processes**: Native Android `WorkManager` & Foreground Services integrated via the plugin to survive app lifecycle terminations.
+- **Database**: [Sqflite](https://pub.dev/packages/sqflite) for robust, local data persistence.
+- **Architecture**: A strict **Feature-First** structure for maximum maintainability and performance.
+
+---
+
+## 💌 A Touch of Love & Support
+Building ME was a journey of understanding that **it's okay not to be okay**. This app is dedicated to the "Night Owls," the "Consistency Masters," and everyone somewhere in between. 
+
+Wherever you are on your path, remember: every entry is a step closer to yourself. You are doing a great job just by showing up.
+
+**Stay mindful. Stay you.** ❤️
+
+---
+*Developed with love for personal growth and emotional clarity.*

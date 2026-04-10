@@ -2,6 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
+import '../../core/app_theme.dart';
+import '../../core/services/theme_service.dart';
 import '../../features/mind/micro_interactions.dart';
 import 'glass_panel.dart';
 
@@ -49,111 +53,101 @@ class _MainCtaState extends State<MainCta>
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
-        // A very small repeating scale/glow keeps the primary task obvious
-        // without turning the dashboard into a noisy animated screen.
+        final settings = context.watch<ThemeService>();
+        final palette = AppTheme.paletteOf(settings.currentTheme);
         final t = Curves.easeInOut.transform(_pulseController.value);
-        final glow = 18 + (12 * t);
-        final scale = 1 + (0.012 * t);
 
-        return Transform.scale(
-          scale: scale,
-          child: TapScale(
-            onTap: widget.onTap,
-            scaleDown: 0.985,
-            child: GlassPanel(
-              padding: const EdgeInsets.all(22),
-              tint: widget.accentColor.withValues(alpha: 0.14),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(26),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.accentColor.withValues(alpha: 0.18),
-                      blurRadius: glow,
-                      spreadRadius: 2,
-                    ),
-                  ],
+        return TapScale(
+          onTap: widget.onTap,
+          scaleDown: 0.98,
+          child: Container(
+            decoration: BoxDecoration(
+              color: palette.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: widget.accentColor.withValues(alpha: 0.1),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.accentColor.withValues(alpha: 0.04),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: widget.accentColor.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        widget.badgeLabel,
-                        style: TextStyle(
-                          color: widget.accentColor,
-                          fontWeight: FontWeight.w700,
-                        ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -20,
+                    top: -20,
+                    child: Opacity(
+                      opacity: 0.08,
+                      child: _CtaOrb(
+                        accentColor: widget.accentColor,
+                        progress: t,
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.title,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineMedium
-                                    ?.copyWith(fontSize: 30),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                widget.subtitle,
-                                style: Theme.of(context).textTheme.bodyLarge,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        _CtaOrb(
-                          accentColor: widget.accentColor,
-                          progress: t,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    Row(
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          height: 50,
-                          width: 50,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: widget.accentColor.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(18),
+                            color: widget.accentColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Icon(
-                            Icons.psychology_alt_rounded,
-                            color: widget.accentColor,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
                           child: Text(
-                            'Mind Me is your next best action.',
-                            style: Theme.of(context).textTheme.titleMedium,
+                            widget.badgeLabel.toUpperCase(),
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: widget.accentColor,
+                                  fontSize: 10,
+                                ),
                           ),
                         ),
-                        const SizedBox(width: 14),
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          color: Theme.of(context).textTheme.titleLarge?.color,
+                        const SizedBox(height: 20),
+                        Text(
+                          widget.title,
+                          style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.subtitle,
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                fontSize: 15,
+                                height: 1.5,
+                              ),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Text(
+                              'Start reflection',
+                              style: TextStyle(
+                                color: widget.accentColor,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 18,
+                              color: widget.accentColor,
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

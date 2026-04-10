@@ -1,4 +1,4 @@
-import 'database_helper.dart';
+import '../db/app_database.dart';
 
 class DayAggregate {
   const DayAggregate({
@@ -18,80 +18,49 @@ class DayAggregate {
 
 class MoodAggregator {
   static Future<DayAggregate?> aggregateDay(String date) async {
-    final entries = await DatabaseHelper.instance.getEntriesForDate(date);
-    if (entries.isEmpty) {
+    final entry = await AppDatabase.instance.getMoodLogByDate(date);
+    if (entry == null) {
       return null;
     }
 
-    final counts = <String, int>{};
-    for (final entry in entries) {
-      final id = entry['mood_id'] as String;
-      counts[id] = (counts[id] ?? 0) + 1;
-    }
-
-    final dominantMood = counts.entries
-        .reduce((a, b) => a.value >= b.value ? a : b)
-        .key;
-
-    final totalIntensity = entries
-        .map((entry) => entry['intensity'] as int)
-        .reduce((a, b) => a + b);
-    final avgIntensity = totalIntensity / entries.length;
-
-    final firstIntensity = entries.first['intensity'] as int;
-    final lastIntensity = entries.last['intensity'] as int;
-    final arc = switch (lastIntensity.compareTo(firstIntensity)) {
-      > 0 => 'improving',
-      < 0 => 'declining',
-      _ => 'stable',
-    };
-
-    final notes = entries
-        .map((entry) => entry['note'] as String?)
-        .whereType<String>()
-        .where((note) => note.trim().isNotEmpty)
-        .toList(growable: false);
+    final notes = entry.note.trim().isNotEmpty ? [entry.note] : const <String>[];
 
     return DayAggregate(
-      dominantMood: dominantMood,
-      avgIntensity: double.parse(avgIntensity.toStringAsFixed(1)),
-      arc: arc,
+      dominantMood: entry.mood,
+      avgIntensity: entry.intensity.toDouble(),
+      arc: 'stable',
       notes: notes,
-      entryCount: entries.length,
+      entryCount: 1,
     );
   }
 
   static Future<Map<String, dynamic>?> aggregateRange(int days) async {
-    final entries = await DatabaseHelper.instance.getAllEntries();
+    final entries = await AppDatabase.instance.fetchMoodLogsBetween(
+      startDate: DateTime.now().subtract(Duration(days: days)).toIso8601String().substring(0, 10),
+      endDate: DateTime.now().toIso8601String().substring(0, 10),
+    );
+
     if (entries.isEmpty) return null;
-
-    final cutoff = DateTime.now().subtract(Duration(days: days));
-    final relevant = entries.where((e) {
-      final ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
-      return ts != null && ts.isAfter(cutoff);
-    }).toList();
-
-    if (relevant.isEmpty) return null;
 
     final counts = <String, int>{};
     double totalIntensity = 0;
     final notes = <String>[];
 
-    for (final entry in relevant) {
-      final id = entry['mood_id'] as String;
-      counts[id] = (counts[id] ?? 0) + 1;
-      totalIntensity += entry['intensity'] as int;
-      final note = entry['note'] as String?;
-      if (note != null && note.trim().isNotEmpty) notes.add(note);
+    for (final entry in entries) {
+      counts[entry.mood] = (counts[entry.mood] ?? 0) + 1;
+      totalIntensity += entry.intensity;
+      if (entry.note.trim().isNotEmpty) {
+        notes.add(entry.note);
+      }
     }
 
     final dominantMood = counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
 
     return {
       'dominantMood': dominantMood,
-      'avgIntensity': (totalIntensity / relevant.length).toStringAsFixed(1),
-      'entryCount': relevant.length,
-      'notes': notes.take(10).toList(), // Limit notes to avoid prompt bloat
+      'avgIntensity': (totalIntensity / entries.length).toStringAsFixed(1),
+      'entryCount': entries.length,
+      'notes': notes.take(10).toList(),
       'moodDistribution': counts,
     };
   }

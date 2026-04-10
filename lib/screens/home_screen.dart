@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_routes.dart';
 import '../core/app_theme.dart';
 import '../core/services/theme_service.dart';
-import '../data/database_helper.dart';
+import '../db/app_database.dart';
 import '../data/mood_aggregator.dart';
 import '../features/mind/daily_insight.dart';
 import '../features/mind/micro_interactions.dart';
@@ -26,6 +26,7 @@ import 'companion_screen.dart';
 import '../shared/widgets/glass_panel.dart';
 import '../shared/widgets/main_cta.dart';
 import '../shared/widgets/progress_card.dart';
+import '../shared/widgets/halftone_overlay.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,7 +37,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _didCheckForUpdates = false;
-  List<Map<String, dynamic>> _todayEntries = const [];
   InsightState _insightState = InsightState.idle;
   String? _insightText;
   bool _loadingExtras = false;
@@ -83,17 +83,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadingExtras = true;
     try {
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final entries = await DatabaseHelper.instance.getEntriesForDate(today);
       final prefs = await SharedPreferences.getInstance();
       final settings = ThemeService.instance;
-      final savedInsight = await DatabaseHelper.instance.getInsight(today);
+      final savedInsight = await AppDatabase.instance.getInsight(today);
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _todayEntries = entries;
         if (settings.insightMode == InsightMode.daily &&
             settings.aiInsightsEnabled &&
             (savedInsight?['daily_insight'] as String?)?.trim().isNotEmpty ==
@@ -109,8 +107,61 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!prefs.containsKey('total_xp')) {
         await prefs.setInt('total_xp', 0);
       }
+
+      if (settings.userName == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _promptForName();
+        });
+      }
     } finally {
       _loadingExtras = false;
+    }
+  }
+
+  Future<void> _promptForName() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final palette = AppTheme.paletteOf(context.read<ThemeService>().currentTheme);
+        return AlertDialog(
+          backgroundColor: palette.scaffold,
+          title: Text(
+            'What should I call you?',
+            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          content: TextField(
+            controller: controller,
+            textCapitalization: TextCapitalization.words,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'Enter your preferred name...',
+              filled: true,
+              fillColor: palette.seed.withValues(alpha: 0.05),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(''),
+              child: Text('Skip', style: TextStyle(color: palette.textMuted)),
+            ),
+            FilledButton.tonal(
+              onPressed: () => Navigator.of(context).pop(controller.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (name != null && name.trim().isNotEmpty) {
+      await ThemeService.instance.setUserName(name);
     }
   }
 
@@ -135,8 +186,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     setState(() => _insightState = InsightState.loading);
 
-    final prefs = await SharedPreferences.getInstance();
-    final streak = prefs.getInt('streak_days') ?? 0;
+    final provider = Provider.of<MindMeProvider>(context, listen: false);
+    final streak = provider.stats.streak;
     final aggregate = await MoodAggregator.aggregateDay(today);
 
     if (aggregate == null) {
@@ -154,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
       aggregate: aggregate,
       streakDays: streak,
     );
-    await DatabaseHelper.instance.saveInsight(today, daily: insight);
+    await AppDatabase.instance.saveInsight(today, daily: insight);
 
     if (!mounted) {
       return;
@@ -179,18 +230,15 @@ class _HomeScreenState extends State<HomeScreen> {
         final moodMap = _buildMoodMap();
 
         return Scaffold(
-          body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  palette.backgroundTop,
-                  palette.backgroundBottom,
-                ],
+          body: HalftoneOverlay(
+            opacity: settings.currentTheme == AppThemePreset.night || settings.currentTheme == AppThemePreset.focus 
+                ? 0.08 
+                : 0.04,
+            child: Container(
+              decoration: BoxDecoration(
+                color: palette.scaffold,
               ),
-            ),
-            child: SafeArea(
+              child: SafeArea(
               child: RefreshIndicator(
                 onRefresh: () async {
                   await provider.refresh();
@@ -260,7 +308,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 10),
                           EntryTimeline(
-                            entries: _todayEntries,
+                            entries: provider.todayLog != null ? [provider.todayLog!] : [],
                             moodMap: moodMap,
                           ),
                         ],
@@ -400,10 +448,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 }
 
 class _DashboardHeader extends StatelessWidget {
@@ -425,6 +474,10 @@ class _DashboardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<MindMeProvider>();
+    final settings = context.watch<ThemeService>();
+    final palette = AppTheme.paletteOf(settings.currentTheme);
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -433,10 +486,10 @@ class _DashboardHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Welcome back',
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      fontSize: 30,
-                    ),
+                settings.userName != null 
+                    ? 'Welcome back,\n${settings.userName}' 
+                    : 'Welcome back',
+                style: Theme.of(context).textTheme.displaySmall,
               ),
               const SizedBox(height: 8),
               Text(
@@ -464,23 +517,54 @@ class _DashboardHeader extends StatelessWidget {
         const SizedBox(width: 12),
         Column(
           children: [
-            IconButton.filledTonal(
+            _CircularIconButton(
+              icon: Icons.history_rounded,
               onPressed: onOpenHistory,
-              icon: const Icon(Icons.history_rounded),
+              color: palette.seed,
             ),
-            const SizedBox(height: 8),
-            IconButton.filledTonal(
+            const SizedBox(height: 12),
+            _CircularIconButton(
+              icon: Icons.person_rounded,
               onPressed: onOpenProfile,
-              icon: const Icon(Icons.person_rounded),
+              color: palette.seed,
             ),
-            const SizedBox(height: 8),
-            IconButton.filledTonal(
+            const SizedBox(height: 12),
+            _CircularIconButton(
+              icon: Icons.tune_rounded,
               onPressed: onOpenSettings,
-              icon: const Icon(Icons.tune_rounded),
+              color: palette.seed,
             ),
           ],
         ),
       ],
+    );
+  }
+}
+
+class _CircularIconButton extends StatelessWidget {
+  const _CircularIconButton({
+    required this.icon,
+    required this.onPressed,
+    required this.color,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withValues(alpha: 0.1)),
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, color: color, size: 22),
+        visualDensity: VisualDensity.compact,
+      ),
     );
   }
 }

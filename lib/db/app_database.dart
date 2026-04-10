@@ -36,6 +36,7 @@ class AppDatabase {
         await _createMoodLogsTable(db);
         await _createMoodLogsIndex(db);
         await _createUserStatsTable(db);
+        await _createInsightsTable(db);
         await _seedUserStatsIfNeeded(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -80,6 +81,10 @@ class AppDatabase {
       await _createUserStatsTable(db);
     }
     await _seedUserStatsIfNeeded(db);
+    
+    if (!await _tableExists(db, 'insights')) {
+      await _createInsightsTable(db);
+    }
   }
 
   Future<void> _createMoodLogsTable(Database db) async {
@@ -90,6 +95,17 @@ class AppDatabase {
         mood TEXT NOT NULL,
         intensity INTEGER NOT NULL DEFAULT 5,
         note TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createInsightsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS insights(
+        date TEXT PRIMARY KEY,
+        instant_insight TEXT,
+        daily_insight TEXT,
+        updated_at TEXT
       )
     ''');
   }
@@ -287,5 +303,55 @@ class AppDatabase {
       UserStats.initial().toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<void> saveInsight(
+    String date, {
+    String? instant,
+    String? daily,
+  }) async {
+    final db = await database;
+    final existing = await db.query(
+      'insights',
+      where: 'date = ?',
+      whereArgs: [date],
+      limit: 1,
+    );
+    final now = DateTime.now().toIso8601String();
+
+    if (existing.isEmpty) {
+      await db.insert(
+        'insights',
+        {
+          'date': date,
+          'instant_insight': instant,
+          'daily_insight': daily,
+          'updated_at': now,
+        },
+      );
+      return;
+    }
+
+    await db.update(
+      'insights',
+      {
+        if (instant != null) 'instant_insight': instant,
+        if (daily != null) 'daily_insight': daily,
+        'updated_at': now,
+      },
+      where: 'date = ?',
+      whereArgs: [date],
+    );
+  }
+
+  Future<Map<String, dynamic>?> getInsight(String date) async {
+    final db = await database;
+    final result = await db.query(
+      'insights',
+      where: 'date = ?',
+      whereArgs: [date],
+      limit: 1,
+    );
+    return result.isEmpty ? null : result.first;
   }
 }

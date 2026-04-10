@@ -166,9 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openMindCompanion() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const CompanionScreen()),
-    );
+    Navigator.of(context).pushNamed('/chat_sessions');
   }
 
   void _showComingSoon() {

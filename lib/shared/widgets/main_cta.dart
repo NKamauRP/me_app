@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/theme_service.dart';
 import '../../features/mind/micro_interactions.dart';
-import 'glass_panel.dart';
 
 class MainCta extends StatefulWidget {
   const MainCta({

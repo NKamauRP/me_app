@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/app_routes.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/services/audio_service.dart';
 import '../../../core/services/theme_service.dart';
 import '../micro_interactions.dart';
 import '../mood_catalog.dart';
@@ -64,6 +65,7 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
   }
 
   void _toggleMood(MoodOption mood) {
+    AudioService.instance.playTap();
     if (_selectedMood?.id == mood.id) {
       setState(() {
         _selectedMood = null;
@@ -84,6 +86,14 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
       (ThemeService settings) => AppTheme.paletteOf(settings.currentTheme),
     );
     final selectedMood = _effectiveSelectedMood;
+    
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenHeight < 700;
+    final isNarrow = screenWidth < 360;
+    
+    final crossAxisCount = isNarrow ? 3 : 4;
+    final childAspectRatio = isSmallScreen ? 0.9 : 1.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -96,22 +106,15 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
             color: palette.scaffold,
           ),
           child: SafeArea(
-            top: false,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final screenWidth = constraints.maxWidth;
-                final crossAxisCount = screenWidth < 400 ? 3 : 4;
-                final crossAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
-                final mainAxisSpacing = screenWidth < 400 ? 10.0 : 12.0;
-                final childAspectRatio = screenWidth < 400 ? 0.76 : 0.88;
-
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 60),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              padding: EdgeInsets.symmetric(
+                horizontal: isNarrow ? 8 : 16,
+                vertical: isSmallScreen ? 8 : 16,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                         Text(
                           'How are you feeling today?',
                           textAlign: TextAlign.center,
@@ -128,15 +131,15 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
                                 color: palette.textMuted,
                               ),
                         ),
-                        const SizedBox(height: 28),
+                        SizedBox(height: isSmallScreen ? 12 : 24),
                         GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _gridMoods.length,
                           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
-                            crossAxisSpacing: crossAxisSpacing,
-                            mainAxisSpacing: mainAxisSpacing,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
                             childAspectRatio: childAspectRatio,
                           ),
                           itemBuilder: (context, index) {
@@ -186,7 +189,7 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
                                   key: ValueKey<String>(
                                     '${selectedMood.id}-${selectedMood.label}',
                                   ),
-                                  padding: const EdgeInsets.only(top: 28),
+                                  padding: const EdgeInsets.only(top: 24),
                                   child: MoodIntensitySlider(
                                     value: _intensity,
                                     color: selectedMood.color,
@@ -196,29 +199,32 @@ class _MoodSelectionScreenState extends State<MoodSelectionScreen> {
                                   ),
                                 ),
                         ),
-                        const SizedBox(height: 28),
-                        AnimatedActionButton(
-                          label: 'Continue',
-                          backgroundColor: selectedMood?.color,
-                          glowColor: selectedMood?.color,
-                          onPressed: !_canContinue || selectedMood == null
-                              ? null
-                              : () {
-                                  Navigator.of(context).push(
-                                    buildAppRoute(
-                                      MindQuestionScreen(
-                                        mood: selectedMood,
-                                        intensity: _intensity,
+                        const SizedBox(height: 24),
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).padding.bottom + 16,
+                          ),
+                          child: AnimatedActionButton(
+                            label: 'Continue',
+                            backgroundColor: selectedMood?.color,
+                            glowColor: selectedMood?.color,
+                            onPressed: !_canContinue || selectedMood == null
+                                ? null
+                                : () {
+                                    AudioService.instance.playTap();
+                                    Navigator.of(context).push(
+                                      buildAppRoute(
+                                        MindQuestionScreen(
+                                          mood: selectedMood,
+                                          intensity: _intensity,
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
+                                    );
+                                  },
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                );
-              },
             ),
           ),
         ),

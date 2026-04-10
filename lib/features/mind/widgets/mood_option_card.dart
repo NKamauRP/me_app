@@ -75,14 +75,16 @@ class _MoodOptionCardState extends State<MoodOptionCard>
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final isCompact = !widget.isWide && width < 400;
-    final emojiSize = isCompact ? 26.0 : 30.0;
-    final labelFontSize = isCompact ? 13.5 : 15.0;
-    final verticalPadding = widget.isWide ? 16.0 : (isCompact ? 8.0 : 12.0);
-    final horizontalPadding = widget.isWide ? 18.0 : (isCompact ? 8.0 : 10.0);
-    final labelSpacing = isCompact ? 6.0 : 10.0;
-    final checkmarkSpacing = isCompact ? 4.0 : 6.0;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmallScreen = screenHeight < 700;
+    
+    final emojiSize = isSmallScreen ? 20.0 : 26.0;
+    final labelFontSize = isSmallScreen ? 9.0 : 11.0;
+    
+    final verticalPadding = widget.isWide ? 16.0 : (isSmallScreen ? 6.0 : 10.0);
+    final horizontalPadding = widget.isWide ? 18.0 : (isSmallScreen ? 6.0 : 8.0);
+    final labelSpacing = isSmallScreen ? 4.0 : 8.0;
+    final checkmarkSpacing = isSmallScreen ? 2.0 : 4.0;
     final selectedBorder = widget.mood.color;
     final neutralBorder = const Color(0xFFD9D9D9);
     final background = widget.isSelected
@@ -131,11 +133,15 @@ class _MoodOptionCardState extends State<MoodOptionCard>
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        widget.mood.label,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          widget.mood.label,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
                       ),
                     ),
                     AnimatedCheckmark(
@@ -161,16 +167,18 @@ class _MoodOptionCardState extends State<MoodOptionCard>
                     ),
                     SizedBox(height: labelSpacing),
                     Flexible(
-                      child: Text(
-                        widget.mood.label,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: labelFontSize,
-                              height: 1.12,
-                            ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          widget.mood.label,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                fontSize: labelFontSize,
+                                height: 1.12,
+                              ),
+                          maxLines: 1,
+                        ),
                       ),
                     ),
                     SizedBox(height: checkmarkSpacing),

@@ -6,7 +6,6 @@ import '../../core/date_utils.dart';
 import '../../features/mind/daily_insight.dart';
 import '../../models/mood_log.dart';
 import '../../models/user_stats.dart';
-import 'glass_panel.dart';
 
 class ProgressCard extends StatefulWidget {
   const ProgressCard({

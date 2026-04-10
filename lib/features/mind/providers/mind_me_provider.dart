@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/date_utils.dart';
 import '../../../db/app_database.dart';
@@ -126,6 +127,10 @@ class MindMeProvider extends ChangeNotifier {
           note: trimmedNote,
         ),
       );
+
+      // Save last mood for AI context
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_logged_mood', mood.id);
 
       // Rewards are calculated after confirming this is the first log for today.
       final reward = _xpEngine.calculate(

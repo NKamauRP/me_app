@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_routes.dart';
 import '../core/app_theme.dart';
@@ -40,10 +41,16 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     final themeService = context.read<ThemeService>();
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final isSetupComplete = prefs.getBool('profile_setup_complete') ?? false;
+
     if (themeService.isFirstLaunch) {
       Navigator.of(context).pushReplacement(
         buildAppRoute(const OnboardingScreen()),
       );
+    } else if (!isSetupComplete) {
+      Navigator.of(context).pushReplacementNamed('/profile_setup');
     } else {
       Navigator.of(context).pushReplacement(
         buildAppRoute(const HomeScreen()),

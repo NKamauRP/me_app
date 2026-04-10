@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
-import 'package:flutter_gemma/core/model_management/cancel_token.dart';
+import 'context_builder.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,12 +32,11 @@ enum AiModelVariant {
     '~1.9 GB',
     ModelType.general,
   ),
-  smolLm(
-    'SmolLM 135M',
-    'smollm_135m.task',
-    // Smallest public model — great for testing the download flow
-    'https://huggingface.co/litert-community/SmolLM-135M-Instruct/resolve/main/SmolLM-135M-Instruct_multi-prefill-seq_q8_ekv1280.task',
-    '~166 MB',
+  qwen3(
+    'Qwen3 0.6B',
+    'qwen3_0.6b.task',
+    'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B_multi-prefill-seq_q8_ekv1280.task',
+    '~600 MB',
     ModelType.gemmaIt,
   );
 
@@ -179,22 +178,11 @@ class AiService {
           )
           .withCancelToken(_cancelToken!)
           .withProgress((progress) {
-            // progress is DownloadProgress object with .percentage (int 0-100)
-            // If the plugin passes a raw int, handle both cases safely:
-            double p;
-            if (progress is int) {
-              p = progress / 100.0;
-            } else {
-              try {
-                // DownloadProgress object
-                p = ((progress as dynamic).percentage as int) / 100.0;
-              } catch (_) {
-                p = downloadProgress.value; // keep last known value
-              }
-            }
-            p = p.clamp(0.0, 1.0);
-            downloadProgress.value = p;
-            onProgress?.call(p);
+            // progress is an int from 0 to 100
+            final double p = progress / 100.0;
+            final clamped = p.clamp(0.0, 1.0);
+            downloadProgress.value = clamped;
+            onProgress?.call(clamped);
           })
           .install();
 
@@ -270,7 +258,7 @@ class AiService {
 
     final variant = AiModelVariant.values.firstWhere(
       (v) => v.name == modelName,
-      orElse: () => AiModelVariant.smolLm,
+      orElse: () => AiModelVariant.qwen3,
     );
 
     // If file is already fully present, clear the flag and move on
@@ -323,7 +311,7 @@ class AiService {
     }
 
     if (!keepVariantConfig) {
-      await setActiveVariant(AiModelVariant.smolLm);
+      await setActiveVariant(AiModelVariant.qwen3);
     }
   }
 
@@ -478,10 +466,10 @@ class AiService {
     return _runInference(prompt, 'tip');
   }
 
-  /// Multi-turn chat used by the Companion screen.
   Future<String> chat({
     required List<Map<String, String>> history,
     String? todayMood,
+    String? sessionTitle,
   }) async {
     final ready = await _ensureInitialised();
     if (!ready) {
@@ -489,18 +477,18 @@ class AiService {
     }
 
     try {
+      // Build context-aware system prompt from ContextBuilder
+      final systemPrompt = await ContextBuilder.instance
+          .buildSystemPrompt(sessionTitle: sessionTitle);
+
       final session = await _chatModel!.createChat(
         temperature: 0.8,
         topK: 40,
         randomSeed: DateTime.now().millisecondsSinceEpoch % 10000,
-        systemInstruction:
-            "You are 'ME', a warm and compassionate mental health companion. "
-            "You are non-clinical, supportive, and focus on emotional awareness. "
-            "${todayMood != null ? "Today the user feels '$todayMood'. " : ''}"
-            "Keep responses brief (max 60 words). "
-            "Ask one follow-up question when appropriate.",
+        systemInstruction: systemPrompt,
       );
 
+      // Inject history (last 20 messages) so model has continuity
       for (final turn in history) {
         final isUser = turn['role'] == 'user';
         await session.addQueryChunk(
@@ -509,7 +497,8 @@ class AiService {
       }
 
       final buffer = StringBuffer();
-      await for (final response in session.generateChatResponseAsync()) {
+      await for (final response
+          in session.generateChatResponseAsync()) {
         if (response is TextResponse) buffer.write(response.token);
       }
 
@@ -538,9 +527,11 @@ class AiService {
       'sad': "It's okay to feel this. Be gentle with yourself today.",
       'chat': "I'm here to listen whenever you're ready to share.",
       'tip': "Try taking five deep breaths today — a simple way to reset.",
+      'weekly': "Your weekly patterns are valuable. Reviewing them helps you grow.",
+      'monthly': "A month of reflection is a huge win. You're building a great habit.",
     };
     return fallbacks[moodId.toLowerCase()] ??
-        'Every log is a step toward self-awareness. Keep going.';
+        "Every log is a step toward self-awareness. Keep going.";
   }
 
   // ── reset ─────────────────────────────────────────────────────────────────

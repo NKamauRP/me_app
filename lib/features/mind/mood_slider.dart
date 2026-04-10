@@ -52,6 +52,11 @@ class _MoodIntensitySliderState extends State<MoodIntensitySlider> {
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenHeight < 700;
+    final isNarrow = screenWidth < 360;
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
@@ -71,47 +76,50 @@ class _MoodIntensitySliderState extends State<MoodIntensitySlider> {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 18),
-            Row(
-              children: [
-                Text(
-                  '1',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: widget.color,
-                      inactiveTrackColor: widget.color.withValues(alpha: 0.16),
-                      thumbColor: widget.color,
-                      overlayColor: widget.color.withValues(alpha: 0.16),
-                      trackHeight: 8,
-                    ),
-                    child: Slider(
-                      min: 1,
-                      max: 10,
-                      divisions: 9,
-                      value: _sliderValue,
-                      label: _sliderValue.round().toString(),
-                      onChanged: (value) {
-                        final rounded = value.round();
-                        final shouldPulse = rounded != _lastHapticValue &&
-                            (rounded == 1 || rounded == 5 || rounded == 10);
-                        if (shouldPulse) {
-                          MindHaptics.sliderTick();
-                        }
-                        _lastHapticValue = rounded;
-
-                        setState(() => _sliderValue = value);
-                        widget.onChanged(rounded);
-                      },
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: isNarrow ? 8 : 16),
+              child: Row(
+                children: [
+                  Text(
+                    'Low',
+                    style: TextStyle(fontSize: isSmallScreen ? 10 : 12),
+                  ),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: widget.color,
+                        inactiveTrackColor: widget.color.withValues(alpha: 0.16),
+                        thumbColor: widget.color,
+                        overlayColor: widget.color.withValues(alpha: 0.16),
+                        trackHeight: isSmallScreen ? 6 : 8,
+                      ),
+                      child: Slider(
+                        min: 1,
+                        max: 10,
+                        divisions: 9,
+                        value: _sliderValue,
+                        label: _sliderValue.round().toString(),
+                        onChanged: (value) {
+                          final rounded = value.round();
+                          final shouldPulse = rounded != _lastHapticValue &&
+                              (rounded == 1 || rounded == 5 || rounded == 10);
+                          if (shouldPulse) {
+                            MindHaptics.sliderTick();
+                          }
+                          _lastHapticValue = rounded;
+  
+                          setState(() => _sliderValue = value);
+                          widget.onChanged(rounded);
+                        },
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  '10',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
+                  Text(
+                    'High',
+                    style: TextStyle(fontSize: isSmallScreen ? 10 : 12),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 6),
             AnimatedSwitcher(
@@ -123,12 +131,16 @@ class _MoodIntensitySliderState extends State<MoodIntensitySlider> {
                     '${_sliderValue.round()}/10',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: widget.color,
+                          fontSize: isSmallScreen ? 14 : 18,
+                          fontWeight: FontWeight.w500,
                         ),
                   ),
                   const SizedBox(width: 12),
                   Text(
                     _label,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontSize: isSmallScreen ? 12 : 14,
+                    ),
                   ),
                 ],
               ),

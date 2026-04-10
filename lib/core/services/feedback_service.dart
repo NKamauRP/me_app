@@ -1,7 +1,7 @@
 import 'dart:async';
 
+import 'audio_service.dart';
 import 'haptics_service.dart';
-import 'sound_service.dart';
 
 enum FeedbackConfettiStyle {
   none,
@@ -34,14 +34,14 @@ class FeedbackService {
 
   FeedbackCue moodTap() {
     unawaited(HapticsService.instance.selectionClick());
-    unawaited(SoundService.instance.playTap());
+    unawaited(AudioService.instance.playTap());
 
     return const FeedbackCue(scalePulse: true);
   }
 
   FeedbackCue submitAction() {
     unawaited(HapticsService.instance.mediumImpact());
-    unawaited(SoundService.instance.playSuccess());
+    unawaited(AudioService.instance.playTap());
 
     return const FeedbackCue(
       buttonGlow: true,
@@ -51,7 +51,7 @@ class FeedbackService {
 
   FeedbackCue streakMilestone() {
     unawaited(HapticsService.instance.mediumImpact());
-    unawaited(SoundService.instance.playReward());
+    unawaited(AudioService.instance.playTap());
 
     return const FeedbackCue(
       cardPulse: true,
@@ -62,7 +62,7 @@ class FeedbackService {
 
   FeedbackCue levelUp() {
     unawaited(HapticsService.instance.heavyImpact());
-    unawaited(SoundService.instance.playReward());
+    unawaited(AudioService.instance.playTap());
 
     return const FeedbackCue(
       cardPulse: true,
@@ -74,7 +74,7 @@ class FeedbackService {
 
   FeedbackCue checkInSuccess() {
     unawaited(HapticsService.instance.lightImpact());
-    unawaited(SoundService.instance.playTap());
+    unawaited(AudioService.instance.playTap());
 
     return const FeedbackCue(
       cardPulse: true,

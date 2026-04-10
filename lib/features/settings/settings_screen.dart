@@ -10,7 +10,6 @@ import '../../core/app_theme.dart';
 import '../../core/services/audio_service.dart';
 import '../../core/services/haptics_service.dart';
 import '../../core/services/notification_service.dart';
-import '../../core/services/sound_service.dart';
 import '../../core/services/theme_service.dart';
 import '../../db/app_database.dart';
 import '../mind/mood_catalog.dart';
@@ -100,6 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _onVariantChanged(AiModelVariant? variant) async {
     if (variant == null) return;
     await AiService.instance.setActiveVariant(variant);
+    if (!mounted) return;
     setState(() {
       _selectedVariant = variant;
       _isModelDownloaded = false;
@@ -150,14 +150,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 ...AiModelVariant.values.map((variant) {
+                  final (description, badgeLabel, badgeColor) = switch (variant) {
+                    AiModelVariant.qwen3 => (
+                        'Works on most phones · fast responses',
+                        'Works on most phones',
+                        Colors.green
+                      ),
+                    AiModelVariant.gemma4 => (
+                        'Recommended · best quality for size',
+                        'Recommended',
+                        Colors.purple
+                      ),
+                    AiModelVariant.phi4 => (
+                        'Richest responses · flagship devices',
+                        'Best quality',
+                        Colors.amber
+                      ),
+                  };
+
                   return ListTile(
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    title: Text(
-                      variant.label, 
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    title: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          variant.label,
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            badgeLabel,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: badgeColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    subtitle: Text('Download size: ${variant.estimate}'),
-                    trailing: Icon(Icons.cloud_download_rounded, color: palette.seed),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 2),
+                        Text(description),
+                        Text('Download size: ${variant.estimate}',
+                            style: theme.textTheme.labelSmall),
+                      ],
+                    ),
+                    trailing:
+                        Icon(Icons.cloud_download_rounded, color: palette.seed),
                     onTap: () => Navigator.of(context).pop(variant),
                   );
                 }),
@@ -229,8 +279,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await prefs.clear();
     await AiService.instance.reset();
     await ThemeService.instance.reloadPreferences();
-    await AudioService.instance.updatePlaybackPreference();
-    await NotificationService.instance.cancelAllScheduled();
+    await AudioService.instance.setMusicEnabled(true);
+    await AudioService.instance.setSfxEnabled(true);
+    await NotificationService.instance.cancelAll();
     await provider.refresh();
 
     if (!mounted) return;
@@ -576,36 +627,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
+                // Device-tier guidance hint
+                Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.blue.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Which model should I download?',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        '• Qwen3 0.6B — any Android phone, fastest\n'
+                        '• Gemma 4 E2B — mid-range and above, best balance\n'
+                        '• Phi-4 Mini — flagship phones, richest responses\n\n'
+                        'Not sure? Start with Qwen3 0.6B.',
+                        style: TextStyle(fontSize: 12, height: 1.6),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 18),
 
-                // ── Notifications ─────────────────────────────────────────
+                // ── Audio ──────────────────────────────────────────
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Notifications', style: theme.textTheme.titleLarge),
+                      Text('Audio', style: theme.textTheme.titleLarge),
                       const SizedBox(height: 12),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Daily reminder at 21:00'),
-                        value: settings.dailyReminderEnabled,
+                        title: const Text('Background music'),
+                        subtitle: const Text('Calm ambient loop'),
+                        value: AudioService.instance.isMusicEnabled,
                         onChanged: (value) async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          if (value) {
-                            final granted = await NotificationService
-                                .instance
-                                .requestPermissionIfNeeded();
-                            if (!granted && mounted) {
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Notification permission is needed to enable reminders.'),
-                                ),
-                              );
-                              return;
-                            }
-                          }
-                          await settings.setDailyReminderEnabled(value);
-                          await NotificationService.instance.syncWithPreferences();
+                          await AudioService.instance.setMusicEnabled(value);
+                          if (!mounted) return;
+                          setState(() {});
+                        },
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Interaction sounds'),
+                        subtitle: const Text('Taps and haptics'),
+                        value: AudioService.instance.isSfxEnabled,
+                        onChanged: (value) async {
+                          await AudioService.instance.setSfxEnabled(value);
+                          if (value) await AudioService.instance.playTap();
+                          if (!mounted) return;
+                          setState(() {});
                         },
                       ),
                     ],
@@ -613,39 +697,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                // ── Sensory Feedback ──────────────────────────────────────
+                // ── Notifications ─────────────────────────────────────────
                 GlassPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Sensory Feedback', style: theme.textTheme.titleLarge),
+                      Text('Reminders', style: theme.textTheme.titleLarge),
                       const SizedBox(height: 12),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Sound effects'),
-                        value: settings.soundEnabled,
-                        onChanged: (value) async {
-                          await settings.setSoundEnabled(value);
-                          if (value) await SoundService.instance.playTap();
-                        },
+                      _NotifToggle(
+                        title: 'Morning reflection',
+                        subtitle: '08:00 — start your day right',
+                        keyName: 'notif_morning',
+                        onChanged: (v) => NotificationService.instance.setMorningEnabled(v),
                       ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Haptics'),
-                        value: settings.hapticsEnabled,
-                        onChanged: (value) async {
-                          await settings.setHapticsEnabled(value);
-                          if (value) await HapticsService.instance.lightImpact();
-                        },
+                      _NotifToggle(
+                        title: 'Noon & Afternoon',
+                        subtitle: '12:00 & 15:00 — mid-day check-ins',
+                        keyName: 'notif_noon',
+                        onChanged: (v) => NotificationService.instance.setNoonEnabled(v),
                       ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Background music'),
-                        value: settings.backgroundMusicEnabled,
-                        onChanged: (value) async {
-                          await settings.setBackgroundMusicEnabled(value);
-                          await AudioService.instance.updatePlaybackPreference();
-                        },
+                      _NotifToggle(
+                        title: 'Evening summary',
+                        subtitle: '21:00 — log your results',
+                        keyName: 'notif_evening',
+                        onChanged: (v) => NotificationService.instance.setEveningEnabled(v),
+                      ),
+                      _NotifToggle(
+                        title: 'Streak at risk',
+                        subtitle: '20:00 — if you haven\'t logged',
+                        keyName: 'notif_streak',
+                        onChanged: (v) => NotificationService.instance.setStreakEnabled(v),
+                      ),
+                      _NotifToggle(
+                        title: 'Weekly summary',
+                        subtitle: 'Sunday 10:00 — your emotional week',
+                        keyName: 'notif_weekly',
+                        onChanged: (v) => NotificationService.instance.setWeeklyEnabled(v),
                       ),
                     ],
                   ),
@@ -786,6 +873,52 @@ class _ModelDetailRow extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
       ],
+    );
+  }
+}
+
+class _NotifToggle extends StatefulWidget {
+  const _NotifToggle({
+    required this.title,
+    required this.subtitle,
+    required this.keyName,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String subtitle;
+  final String keyName;
+  final Function(bool) onChanged;
+
+  @override
+  State<_NotifToggle> createState() => _NotifToggleState();
+}
+
+class _NotifToggleState extends State<_NotifToggle> {
+  bool _enabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() => _enabled = prefs.getBool(widget.keyName) ?? true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(widget.title),
+      subtitle: Text(widget.subtitle),
+      value: _enabled,
+      onChanged: (v) async {
+        setState(() => _enabled = v);
+        await widget.onChanged(v);
+      },
     );
   }
 }

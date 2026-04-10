@@ -33,7 +33,7 @@ To provide you with high-quality reflection without compromising your privacy, M
 
 | Model | Personality | Size | Best For |
 | :--- | :--- | :--- | :--- |
-| **SmolLM 135M** | *Quick & Direct* | ~166 MB | Extremely fast test runs and minimal battery drain. |
+| **Qwen3 0.6B** | *Quick & Fast* | ~600 MB | Extremely fast and conversational responses. |
 | **Phi-4 Mini** | *Versatile & Wise* | ~1.9 GB | Comprehensive logic and creative encouragement. |
 | **Gemma 4 E2B** | *Deep & Insightful* | ~1.4 GB | Complex reflections and detailed monthly themes. |
 
@@ -52,6 +52,9 @@ In our journey to make ME as resilient and robust as possible, we have heavily f
 - **Double-Download Race Conditions**: Modified the app initialization sequence to carefully inspect local disk states and running foreground services instead of blindly re-invoking network downloads on startup.
 - **Active Cancellation**: Plumbed native `CancelToken` architectures into the UI, giving you exactly what you need to safely and completely kill a 2GB download instantly without corrupting local app state.
 - **Safe Storage Overwrites**: Switching AI models now correctly and physically destroys the previous `.litertlm`/`.task` file from your device, but **only after** the new model verifies its integrity, ensuring zero wasted storage space.
+- **Zero-Overflow Layout**: Refactored the entire mood selection interface with `SafeArea` and dynamic `MediaQuery` scaling, ensuring a premium, crash-free experience on every Android screen dimension.
+- **Unified Audio Architecture**: Consolidated background music and tactile sound effects into a single, high-performance service, eliminating redundant legacy logic and reducing the app's memory footprint.
+- **7-Stage Notification Scheduling**: Deployed a robust, multi-channel notification engine with precise daily and weekly reminders, including AI-driven personalized insights and level-up milestones.
 
 ---
 

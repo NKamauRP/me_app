@@ -103,6 +103,7 @@ class _MindResultScreenState extends State<MindResultScreen> {
 
     if (mounted && widget.result.leveledUp) {
       await showLevelUpDialog(context, widget.result.stats.level);
+      await NotificationService.instance.showLevelUpNotification(widget.result.stats.level);
     }
 
     final prefs = await SharedPreferences.getInstance();

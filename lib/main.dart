@@ -9,6 +9,9 @@ import 'core/services/theme_service.dart';
 import 'db/app_database.dart';
 import 'features/mind/providers/mind_me_provider.dart';
 import 'screens/splash_screen.dart';
+import 'features/settings/settings_screen.dart';
+import 'screens/chat_sessions_screen.dart';
+import 'screens/profile_setup_screen.dart';
 import 'services/ai_service.dart';
 
 void main() async {
@@ -25,31 +28,21 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ThemeService.instance.initialize();
-      await AudioService.instance.initialize();
-      await NotificationService.instance.initialize();
+      await AudioService.instance.init();
+      await NotificationService.instance.init();
+      await NotificationService.instance.scheduleAllDailyNotifications();
     });
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      AudioService.instance.stop();
-    } else if (state == AppLifecycleState.resumed) {
-      AudioService.instance.resume();
-    }
   }
 
   @override
@@ -82,6 +75,10 @@ class _AppView extends StatelessWidget {
           themeAnimationCurve: Curves.easeOutCubic,
           themeAnimationDuration: const Duration(milliseconds: 420),
           home: const SplashScreen(),
+          routes: {
+            '/chat_sessions': (context) => const ChatSessionsScreen(),
+            '/profile_setup': (context) => const ProfileSetupScreen(),
+          },
         );
       },
     );

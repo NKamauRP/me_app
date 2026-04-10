@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../core/date_utils.dart';
 import '../models/user_stats.dart';
 
@@ -64,5 +66,5 @@ class XpEngine {
     );
   }
 
-  int _levelFromXp(int xp) => 1 + (xp ~/ xpPerLevel);
+  int _levelFromXp(int xp) => math.sqrt(xp / xpPerLevel).floor();
 }

@@ -3,11 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
-import 'context_builder.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/mood_aggregator.dart';
+import '../data/chat_database.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model catalogue
@@ -53,6 +53,22 @@ enum AiModelVariant {
     this.estimate,
     this.modelType,
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MoodState
+// ─────────────────────────────────────────────────────────────────────────────
+
+class MoodState {
+  String mood;
+  String trend;
+  List<String> triggers;
+
+  MoodState({
+    required this.mood,
+    required this.trend,
+    required this.triggers,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,6 +377,60 @@ class AiService {
     }
   }
 
+  // ── MoodState & Summarization Helpers ─────────────────────────────────────
+
+  MoodState _extractMoodState(String text) {
+    // Lightweight keyword detection for placeholders as requested
+    String mood = 'neutral';
+    String trend = 'stable';
+    List<String> triggers = [];
+
+    final lowTriggers = text.toLowerCase();
+    if (lowTriggers.contains('work') || lowTriggers.contains('job')) triggers.add('work');
+    if (lowTriggers.contains('family') || lowTriggers.contains('home')) triggers.add('family');
+    if (lowTriggers.contains('health') || lowTriggers.contains('tired')) triggers.add('health');
+    
+    if (lowTriggers.contains('better') || lowTriggers.contains('happy')) mood = 'positive';
+    if (lowTriggers.contains('worse') || lowTriggers.contains('sad')) mood = 'negative';
+
+    return MoodState(mood: mood, trend: trend, triggers: triggers);
+  }
+
+  Future<String> _generateSummary(String oldSummary, List<Map<String, String>> messages) async {
+    final ready = await _ensureInitialised();
+    if (!ready) return oldSummary;
+
+    final historyText = messages.map((m) => '${m['role']}: ${m['content']}').join('\n');
+    final prompt = """
+Current Conversation Summary:
+$oldSummary
+
+New messages to incorporate:
+$historyText
+
+TASK:
+Summarize user's emotional state, triggers, and mood trend in under 80 tokens.
+Return only the new summary.
+""";
+
+    try {
+      final session = await _chatModel!.createChat(
+        temperature: 0.3,
+        systemInstruction: 'You are a concise summarizer for a mental health app.',
+      );
+      await session.addQueryChunk(Message.text(text: prompt, isUser: true));
+      
+      final buffer = StringBuffer();
+      await for (final resp in session.generateChatResponseAsync()) {
+        if (resp is TextResponse) buffer.write(resp.token);
+      }
+      return buffer.toString().trim();
+    } catch (e) {
+      debugPrint('AiService._generateSummary Error: $e');
+      return oldSummary;
+    }
+  }
+
   // ── inference helpers ─────────────────────────────────────────────────────
 
   Future<String> _runInference(String userPrompt, String fallbackMoodId) async {
@@ -467,6 +537,7 @@ class AiService {
   }
 
   Future<String> chat({
+    required String sessionId,
     required List<Map<String, String>> history,
     String? todayMood,
     String? sessionTitle,
@@ -477,36 +548,90 @@ class AiService {
     }
 
     try {
-      // Build context-aware system prompt from ContextBuilder
-      final systemPrompt = await ContextBuilder.instance
-          .buildSystemPrompt(sessionTitle: sessionTitle);
+      // 1. Fetch current summary and update mood state
+      String currentSummary = await ChatDatabase.instance.getSummary(sessionId) ?? "";
+      final lastUserMsg = history.lastWhere((m) => m['role'] == 'user')['content'] ?? "";
+      final moodState = _extractMoodState(lastUserMsg);
 
+      // 2. Token / Length check for summarization
+      const int maxRecent = 4;
+      const int summaryTriggerCount = 8;
+      
+      List<Map<String, String>> recentMessages = history;
+
+      // Estimate tokens
+      int historyLength = history.fold(0, (sum, m) => sum + (m['content']?.length ?? 0));
+      int estimatedTokens = historyLength ~/ 4;
+
+      if (history.length > summaryTriggerCount || estimatedTokens > 1800) {
+        debugPrint('AiService.chat: Summarization triggered (Count: ${history.length}, Tokens: $estimatedTokens)');
+        
+        // Summarize all but the last 4 messages
+        final olderCount = history.length - maxRecent;
+        if (olderCount > 0) {
+          final olderMessages = history.sublist(0, olderCount);
+          currentSummary = await _generateSummary(currentSummary, olderMessages);
+          await ChatDatabase.instance.updateSummary(sessionId, currentSummary);
+          recentMessages = history.sublist(olderCount);
+        }
+      } else {
+        // Just keep last 4 for prompt relevance if not summarizing
+        if (history.length > maxRecent) {
+          recentMessages = history.sublist(history.length - maxRecent);
+        }
+      }
+
+      // 3. Build structured prompt
+      final recentText = recentMessages.map((m) => '${m['role'] == 'user' ? 'User' : 'Assistant'}: ${m['content']}').join('\n');
+      
+      final prompt = """
+You are a mood support assistant inside a mood tracking app.
+
+USER MOOD STATE (structured):
+- Current mood: ${moodState.mood}
+- Trend: ${moodState.trend}
+- Triggers: ${moodState.triggers.join(', ')}
+
+CONVERSATION SUMMARY:
+$currentSummary
+
+RECENT MESSAGES (last $maxRecent only):
+$recentText
+
+RULES:
+- Respond in max 2 sentences
+- Be emotionally supportive
+- Do not repeat earlier responses
+- Do not act like a general chatbot
+- Focus on mood insight, not conversation expansion
+
+Assistant:
+""";
+
+      debugPrint('AiService.chat: Prompt Length: ${prompt.length}, Est Tokens: ${prompt.length ~/ 4}');
+
+      // 4. Run inference with timeout
       final session = await _chatModel!.createChat(
         temperature: 0.8,
         topK: 40,
         randomSeed: DateTime.now().millisecondsSinceEpoch % 10000,
-        systemInstruction: systemPrompt,
+        systemInstruction: prompt,
       );
 
-      // Inject history (last 20 messages) so model has continuity
-      for (final turn in history) {
-        final isUser = turn['role'] == 'user';
-        await session.addQueryChunk(
-          Message.text(text: turn['content'] ?? '', isUser: isUser),
-        );
-      }
-
       final buffer = StringBuffer();
-      await for (final response
-          in session.generateChatResponseAsync()) {
+      // Use 6s timeout for the entire generation process
+      await for (final response in session.generateChatResponseAsync().timeout(const Duration(seconds: 6))) {
         if (response is TextResponse) buffer.write(response.token);
       }
 
       final result = buffer.toString().trim();
-      return result.isNotEmpty ? result : _fallback('chat');
+      return result.isNotEmpty ? result : "I'm still here—can you rephrase that?";
     } catch (e) {
-      debugPrint('AiService.chat: $e');
-      return _fallback('chat');
+      debugPrint('AiService.chat Error: $e');
+      if (e is TimeoutException) {
+        return "I'm still here—tell me a bit more.";
+      }
+      return "I'm still here—can you rephrase that?";
     }
   }
 

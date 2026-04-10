@@ -5,6 +5,9 @@ import '../controllers/chat_controller.dart';
 import '../services/ai_service.dart';
 import '../services/context_builder.dart';
 import '../widgets/model_status_dot.dart';
+import 'package:confetti/confetti.dart';
+import '../data/chat_database.dart';
+import 'chat_screen.dart'; // For self-navigation into new session
 
 class ChatScreen extends StatefulWidget {
   final String sessionId;
@@ -27,10 +30,13 @@ class _ChatScreenState extends State<ChatScreen> {
   List<String> _starters = [];
   bool _startersVisible = true;
   bool _isInit = false;
+  late ConfettiController _confettiController;
+  bool _hasTriggeredConfetti = false;
 
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _controller = ChatController(
         sessionId: widget.sessionId,
@@ -56,6 +62,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _controller.removeListener(_onControllerUpdate);
+    _confettiController.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -63,6 +70,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _onControllerUpdate() {
     if (mounted) {
+      if (_controller.isSessionFull && !_hasTriggeredConfetti) {
+        _hasTriggeredConfetti = true;
+        _confettiController.play();
+      }
+      
       setState(() {});
       // Auto-scroll to bottom when new message arrives
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -101,50 +113,123 @@ class _ChatScreenState extends State<ChatScreen> {
           ModelStatusDot(),
         ],
       ),
-      body: Column(
+      body: Stack(
+        alignment: Alignment.topCenter,
         children: [
-          // Message list
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: _controller.messages.length,
-              itemBuilder: (context, i) {
-                final msg = _controller.messages[i];
-                if (msg.isLoading) return const _TypingIndicator();
-                return _MessageBubble(message: msg);
-              },
-            ),
-          ),
-
-          // Conversation starters
-          if (_startersVisible && _starters.isNotEmpty)
-            _StarterChips(
-              starters: _starters,
-              onTap: (text) {
-                setState(() => _startersVisible = false);
-                _controller.sendMessage(text);
-              },
-            ),
-
-          // Error banner
-          if (_controller.errorMessage != null)
-            Container(
-              color: Colors.red.withValues(alpha: 0.1),
-              padding: const EdgeInsets.all(8),
-              width: double.infinity,
-              child: Text(
-                _controller.errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red, fontSize: 13),
+          Column(
+            children: [
+              // Message list
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  itemCount: _controller.messages.length,
+                  itemBuilder: (context, i) {
+                    final msg = _controller.messages[i];
+                    if (msg.isLoading) return const _TypingIndicator();
+                    return _MessageBubble(message: msg);
+                  },
+                ),
               ),
-            ),
+    
+              // Conversation starters
+              if (_startersVisible && _starters.isNotEmpty)
+                _StarterChips(
+                  starters: _starters,
+                  onTap: (text) {
+                    setState(() => _startersVisible = false);
+                    _controller.sendMessage(text);
+                  },
+                ),
+    
+              // Error banner
+              if (_controller.errorMessage != null)
+                Container(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  padding: const EdgeInsets.all(8),
+                  width: double.infinity,
+                  child: Text(
+                    _controller.errorMessage!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+                ),
+    
+              // Input row or "Start Fresh"
+              if (_controller.isSessionFull)
+                _StartFreshButton(
+                  onPressed: _handleStartFresh,
+                )
+              else
+                _InputRow(
+                  controller: _inputController,
+                  isResponding: _controller.isResponding,
+                  onSend: _handleSend,
+                ),
+            ],
+          ),
+          ConfettiWidget(
+            confettiController: _confettiController,
+            blastDirectionality: BlastDirectionality.explosive,
+            shouldLoop: false,
+            colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
+          ),
+        ],
+      ),
+    );
+  }
 
-          // Input row
-          _InputRow(
-            controller: _inputController,
-            isResponding: _controller.isResponding,
-            onSend: _handleSend,
+  Future<void> _handleStartFresh() async {
+    final currentSummary = await ChatDatabase.instance.getSummary(widget.sessionId);
+    final newSessionId = await ChatDatabase.instance.createSession(
+      'Follow-up: ${widget.sessionTitle}',
+      initialSummary: currentSummary,
+    );
+    
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            sessionId: newSessionId,
+            sessionTitle: 'Follow-up: ${widget.sessionTitle}',
+          ),
+        ),
+      );
+    }
+  }
+}
+
+class _StartFreshButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _StartFreshButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        border: Border(top: BorderSide(color: Colors.black.withValues(alpha: 0.05))),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Session fully loaded with insights!',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.indigo),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: onPressed,
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('Start Fresh Session'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7F77DD),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+            ),
           ),
         ],
       ),

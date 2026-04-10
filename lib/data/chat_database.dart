@@ -18,9 +18,14 @@ class ChatDatabase {
     final path = join(dbPath, 'companion_chat.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE chat_sessions ADD COLUMN summary TEXT');
+        }
       },
       onCreate: (db, _) async {
         // One row per conversation thread
@@ -30,7 +35,8 @@ class ChatDatabase {
             title      TEXT NOT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            is_pinned  INTEGER NOT NULL DEFAULT 0
+            is_pinned  INTEGER NOT NULL DEFAULT 0,
+            summary    TEXT
           )
         ''');
 
@@ -61,7 +67,7 @@ class ChatDatabase {
 
   // ── Sessions ────────────────────────────────────────────────────
 
-  Future<String> createSession(String title) async {
+  Future<String> createSession(String title, {String? initialSummary}) async {
     try {
       final db = await database;
       final now = DateTime.now().toIso8601String();
@@ -72,6 +78,7 @@ class ChatDatabase {
         'created_at': now,
         'updated_at': now,
         'is_pinned': 0,
+        'summary': initialSummary,
       });
       return id;
     } catch (e) {
@@ -147,6 +154,37 @@ class ChatDatabase {
       // but keeping it doesn't hurt if foreign keys were somehow disabled.
     } catch (e) {
       debugPrint('ChatDatabase.deleteSession Error: $e');
+    }
+  }
+
+  Future<void> updateSummary(String id, String summary) async {
+    try {
+      final db = await database;
+      await db.update(
+        'chat_sessions',
+        {'summary': summary},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } catch (e) {
+      debugPrint('ChatDatabase.updateSummary Error: $e');
+    }
+  }
+
+  Future<String?> getSummary(String id) async {
+    try {
+      final db = await database;
+      final rows = await db.query(
+        'chat_sessions',
+        columns: ['summary'],
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (rows.isEmpty) return null;
+      return rows.first['summary'] as String?;
+    } catch (e) {
+      debugPrint('ChatDatabase.getSummary Error: $e');
+      return null;
     }
   }
 

@@ -29,6 +29,10 @@ class ChatController extends ChangeNotifier {
   final List<ChatMessage> messages = [];
   bool isResponding = false;
   String? errorMessage;
+  bool _hasWarned = false;
+
+  bool get isSessionFull => messages.where((m) => !m.isLoading).length >= 20;
+  bool get canSend => !isSessionFull && !isResponding;
 
   // ── Load existing messages from DB ─────────────────────────────
 
@@ -49,7 +53,7 @@ class ChatController extends ChangeNotifier {
   // ── Send a message ─────────────────────────────────────────────
 
   Future<void> sendMessage(String userText) async {
-    if (userText.trim().isEmpty || isResponding) return;
+    if (userText.trim().isEmpty || !canSend) return;
 
     errorMessage = null;
 
@@ -90,13 +94,14 @@ class ChatController extends ChangeNotifier {
     // 5. Extract and save user name if mentioned
     _extractAndSaveMemory(userText);
 
-    // 6. Build history for inference (last 20 exchanges)
+    // 6. Build history for inference (last 50 messages to allow AI-side summarization)
     final history = await ChatDatabase.instance
-        .getHistoryForInference(sessionId, limit: 20);
+        .getHistoryForInference(sessionId, limit: 50);
 
     // 7. Run inference
     try {
       final response = await AiService.instance.chat(
+        sessionId: sessionId,
         history: history,
         sessionTitle: sessionTitle,
       );
@@ -118,6 +123,9 @@ class ChatController extends ChangeNotifier {
 
       // 10. Check if model is downloaded and show one-time prompt
       await _checkAndShowDownloadPrompt();
+
+      // 11. Check message count for warning
+      _checkMessageCount();
 
     } catch (e) {
       if (messages.isNotEmpty && messages.last.isLoading) {
@@ -198,6 +206,30 @@ class ChatController extends ChangeNotifier {
           'yes — last mention: ${DateTime.now().toIso8601String().substring(0, 10)}',
         );
       }
+    }
+  }
+
+  void _checkMessageCount() {
+    final count = messages.where((m) => !m.isLoading).length;
+    if (count >= 15 && !_hasWarned) {
+      _hasWarned = true;
+      final warning = ChatMessage(
+        role: 'assistant',
+        content: '💡 We\'ve talked a lot! In ${20 - count} more messages, '
+                 'I\'ll need to start a fresh thread to stay focused. '
+                 'Don\'t worry, I\'ll remember our conversation summary!',
+        timestamp: DateTime.now(),
+      );
+      messages.add(warning);
+      notifyListeners();
+      
+      // We don't save this meta-warning to DB usually, 
+      // but let's do it so it stays visible if they reload
+      ChatDatabase.instance.insertMessage(
+        sessionId: sessionId,
+        role: 'assistant',
+        content: warning.content,
+      );
     }
   }
 }

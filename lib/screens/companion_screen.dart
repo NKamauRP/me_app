@@ -80,6 +80,7 @@ class _CompanionScreenState extends State<CompanionScreen> {
 
     try {
       final response = await AiService.instance.chat(
+        sessionId: 'transient_standalone_companion', // Persistent memory for standalone screen
         history: history,
         todayMood: todayMood,
       );

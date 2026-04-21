@@ -22,7 +22,6 @@ import '../services/update_service.dart';
 import '../widgets/entry_timeline.dart';
 import '../widgets/insight_card.dart';
 import 'profile_screen.dart';
-import 'companion_screen.dart';
 import '../shared/widgets/glass_panel.dart';
 import '../shared/widgets/main_cta.dart';
 import '../shared/widgets/progress_card.dart';

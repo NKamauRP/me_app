@@ -161,11 +161,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'Recommended',
                         Colors.purple
                       ),
-                    AiModelVariant.phi4 => (
-                        'Richest responses · flagship devices',
-                        'Best quality',
-                        Colors.amber
-                      ),
                   };
 
                   return ListTile(
@@ -304,16 +299,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final palette = AppTheme.paletteOf(settings.currentTheme);
 
         return Scaffold(
+          backgroundColor: palette.scaffold,
           appBar: AppBar(title: const Text('Settings')),
           body: HalftoneOverlay(
             opacity: settings.currentTheme == AppThemePreset.night || settings.currentTheme == AppThemePreset.focus 
                 ? 0.08 
                 : 0.04,
-            child: Container(
-              decoration: BoxDecoration(
-                color: palette.scaffold,
-              ),
-              child: ListView(
+            child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
               children: [
                 // ── Setup Banner ──────────────────────────────────────────
@@ -801,11 +793,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-        ),
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 }
 
 // ── Supporting widgets ─────────────────────────────────────────────────────

@@ -8,15 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/mood_aggregator.dart';
 import '../data/chat_database.dart';
+import '../models/model_config.dart';
+import 'model_download_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Model catalogue
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// All on-device models the app supports.
-///
-/// Use only PUBLIC models (no HuggingFace auth required) to avoid silent
-/// download failures. Gemma 3 1B from litert-community is gated — avoid it.
 enum AiModelVariant {
   gemma4(
     'Gemma 4 E2B',
@@ -24,13 +19,7 @@ enum AiModelVariant {
     'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm',
     '~1.4 GB',
     ModelType.gemmaIt,
-  ),
-  phi4(
-    'Phi-4 Mini',
-    'phi4_q8_ekv1280.task',
-    'https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/phi4_q8_ekv1280.task',
-    '~1.9 GB',
-    ModelType.general,
+    'gemma_4_e2b',
   ),
   qwen3(
     'Qwen3 0.6B',
@@ -38,6 +27,7 @@ enum AiModelVariant {
     'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B_multi-prefill-seq_q8_ekv1280.task',
     '~600 MB',
     ModelType.gemmaIt,
+    'qwen3_0_6b',
   );
 
   final String label;
@@ -45,6 +35,7 @@ enum AiModelVariant {
   final String url;
   final String estimate;
   final ModelType modelType;
+  final String registryId;
 
   const AiModelVariant(
     this.label,
@@ -52,6 +43,7 @@ enum AiModelVariant {
     this.url,
     this.estimate,
     this.modelType,
+    this.registryId,
   );
 }
 
@@ -76,20 +68,25 @@ class MoodState {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AiService {
-  AiService._();
+  AiService._() {
+    isDownloading = ValueNotifier<bool>(_downloader.status.value == DownloadStatus.downloading);
+    _downloader.status.addListener(() {
+      isDownloading.value = _downloader.status.value == DownloadStatus.downloading;
+    });
+  }
   static final AiService instance = AiService._();
 
   static const _activeModelKey = 'ai_active_model_variant';
 
   InferenceModel? _chatModel;
   bool _isInitialising = false;
-  CancelToken? _cancelToken;
   bool _modelRegistered = false; // prevents re-registering on every inference
 
-  final ValueNotifier<bool> isDownloading = ValueNotifier<bool>(false);
-  // Progress stored as 0.0–1.0 for use in LinearProgressIndicator
-  final ValueNotifier<double> downloadProgress = ValueNotifier<double>(0.0);
-  final ValueNotifier<String?> downloadError = ValueNotifier<String?>(null);
+  final ModelDownloadService _downloader = ModelDownloadService();
+
+  late final ValueNotifier<bool> isDownloading;
+  ValueNotifier<double> get downloadProgress => _downloader.progress;
+  ValueNotifier<String?> get downloadError => _downloader.errorMessage;
 
   // ── lifecycle ──────────────────────────────────────────────────────────────
 
@@ -124,13 +121,19 @@ class AiService {
 
   Future<String> getModelPath(AiModelVariant variant) async {
     final dir = await getApplicationDocumentsDirectory();
-    return '${dir.path}/${variant.fileName}';
+    final newPath = '${dir.path}/models/${variant.registryId}/${variant.fileName}';
+    final oldPath = '${dir.path}/${variant.fileName}';
+    
+    if (await File(newPath).exists()) return newPath;
+    return oldPath; // fallback for legacy files
   }
 
   Future<bool> isModelDownloaded(AiModelVariant variant) async {
     try {
       final path = await getModelPath(variant);
-      return File(path).exists();
+      final file = File(path);
+      if (!await file.exists()) return false;
+      return (await file.length()) > 0;
     } catch (_) {
       return false;
     }
@@ -169,92 +172,42 @@ class AiService {
     void Function()? onComplete,
     void Function(String message)? onError,
   }) async {
-    if (isDownloading.value) {
-      onError?.call('A download is already in progress.');
+    final config = ModelRegistry.getById(variant.registryId);
+    if (config == null) {
+      onError?.call('Model configuration not found in registry.');
       return;
     }
-
-    isDownloading.value = true;
-    downloadProgress.value = 0.0;
-    downloadError.value = null;
-    _cancelToken = CancelToken();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_downloading_ai_model', true);
     await prefs.setString('downloading_ai_model_name', variant.name);
 
     try {
-      await FlutterGemma.installModel(
-        modelType: variant.modelType,
-      )
-          .fromNetwork(
-            variant.url,
-            // DO NOT pass foreground: true — not a valid parameter,
-            // foreground service is automatic for files > 500MB
-          )
-          .withCancelToken(_cancelToken!)
-          .withProgress((progress) {
-            // progress is an int from 0 to 100
-            final double p = progress / 100.0;
-            final clamped = p.clamp(0.0, 1.0);
-            downloadProgress.value = clamped;
-            onProgress?.call(clamped);
-          })
-          .install();
-
-      // Only clean up old model AFTER successful download
-      final oldVariant = await getActiveVariant();
-      if (oldVariant != variant) {
-        final oldPath = await getModelPath(oldVariant);
-        final oldFile = File(oldPath);
-        if (await oldFile.exists()) {
-          try { await oldFile.delete(); } catch (_) {}
-        }
+      // Progress listener
+      void progressListener() {
+        onProgress?.call(_downloader.progress.value);
       }
+      _downloader.progress.addListener(progressListener);
+
+      await _downloader.downloadModel(config);
+      
+      _downloader.progress.removeListener(progressListener);
 
       _chatModel = null;
       _modelRegistered = false;
-      downloadProgress.value = 1.0;
       await setActiveVariant(variant);
       await prefs.setBool('is_downloading_ai_model', false);
-      _cancelToken = null;
       onComplete?.call();
 
-    } on Object catch (error) {
-      final isCancelled = _cancelToken != null &&
-          CancelToken.isCancel(error);
-
-      if (!isCancelled) {
-        // Delete partial/corrupt file on failure
-        try {
-          final path = await getModelPath(variant);
-          final file = File(path);
-          if (await file.exists()) await file.delete();
-        } catch (_) {}
-
-        final msg = error.toString();
-        downloadError.value = msg;
-        await prefs.setBool('is_downloading_ai_model', false);
-        onError?.call(msg);
-      } else {
-        // Cancelled intentionally — clean up quietly
-        try {
-          final path = await getModelPath(variant);
-          final file = File(path);
-          if (await file.exists()) await file.delete();
-        } catch (_) {}
-        await prefs.setBool('is_downloading_ai_model', false);
-        downloadError.value = null;
-      }
-    } finally {
-      isDownloading.value = false;
-      _cancelToken = null;
+    } catch (error) {
+      _downloader.cancel();
+      await prefs.setBool('is_downloading_ai_model', false);
+      onError?.call(error.toString());
     }
   }
 
-  /// Call this to let the user cancel a stalled or unwanted download.
   void cancelDownload() {
-    _cancelToken?.cancel('User cancelled download');
+    _downloader.cancel();
   }
 
   /// Called on app startup. Clears stale download flags.
@@ -354,9 +307,13 @@ class AiService {
     _isInitialising = true;
     try {
       // Register the local file with the plugin — only if not already done.
-      // Calling installModel().fromFile() repeatedly re-initialises the
-      // native engine and causes GPU delegate crashes on the second call.
       if (!_modelRegistered) {
+        final config = ModelRegistry.getById(variant.registryId);
+        if (config == null || (config.engine != 'gemma')) {
+           debugPrint('AiService: Skipping plugin install for non-gemma engine: ${config?.engine}');
+           return false;
+        }
+
         await FlutterGemma.installModel(
           modelType: variant.modelType,
         ).fromFile(await getModelPath(variant)).install();
@@ -669,7 +626,6 @@ Assistant:
     _chatModel = null;
     _isInitialising = false;
     _modelRegistered = false;
-    _cancelToken = null;
     isDownloading.value = false;
     downloadProgress.value = 0.0;
     downloadError.value = null;
